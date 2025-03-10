@@ -1,67 +1,9 @@
-"""Generic Helper functions"""
+"""Helper functions for usuage with"""
 
-import random
-from datetime import timedelta
-from typing import TYPE_CHECKING
+from datetime import datetime, timedelta
 
-import pandas as pd
 import pytimeparse
 from scrapling.defaults import Fetcher
-
-
-def gen_stock_list(
-    url: str = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
-) -> dict[str, str]:
-    """Generate a stock list by randomly select a S&P500 stock from each GICS Sector.
-
-    Args:
-        url (str):
-            URL to download complete list of S&P500 stocks
-            (Default: "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies").
-
-    Returns:
-        stock_dict (dict[str, str]):
-            Dictionary containing 11 stocks selected from each of 11 GICS Sector.
-    """
-
-    # Get DataFrame containing info on S&P500 stocks
-    df_info, _ = pd.read_html(url)
-
-    stock_dict = {}
-    for sector in df_info["GICS Sector"].unique():
-        # Get list of tickers in the same GICS Sector
-        sector_list = df_info.loc[df_info["GICS Sector"] == sector, "Symbol"].to_list()
-
-        # Randomly select a single stock from 'sector_list'
-        stock_dict[sector] = random.choice(sector_list)
-
-    return stock_dict
-
-
-def get_gics_sector(
-    tickers: list[str],
-    url: str = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
-) -> dict[str, str]:
-    """Get GICS Sector for given list of stock tickers.
-
-    Args:
-        tickers (list[str]):
-            List of stock tickers.
-        url (str):
-            URL to download complete list of S&P500 stocks
-            (Default: "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies").
-
-    Returns:
-        (dict[str, str]): Dictionary mapping stock ticker to its GICS Sector.
-    """
-
-    # Get DataFrame containing info on S&P500 stocks
-    df_info, _ = pd.read_html(url)
-
-    return {
-        ticker: df_info.loc[df_info["Symbol"] == ticker, "GICS Sector"].item()
-        for ticker in tickers
-    }
 
 
 def extract_all_text(url: str) -> str:
@@ -126,3 +68,30 @@ def convert_to_timedelta(period_str: str) -> timedelta | None:
         return
 
     return timedelta(seconds=period_in_seconds)
+
+
+def cal_pub_date(period: str, scrape_dt: str) -> datetime:
+    """Compute published date based on 'period' and 'current_dt'.
+
+    Args:
+        period (str):
+            Amount of time lapsed since news is published.
+        scrape_dt (str):
+            Date and time ('YYYYMMDD_HHMM' format) when Yahoo Finance
+            is webscrapped.
+
+    Returns:
+        (datetime): Published date in "YYYY-MM-DD' format.
+    """
+
+    # Convert 'scrape_dt' to datetime object
+    scrape_dt = datetime.strptime(scrape_dt, "%Y%m%d_%H%M")
+
+    # Convert 'period' string to timedelta object
+    delta = convert_to_timedelta(period)
+
+    # Published date = scrape_dt - delta
+    pub_dt = scrape_dt - delta
+
+    # Omit time
+    return pub_dt

@@ -1,6 +1,8 @@
 """Functions to perform web-scrapping via Playwright."""
 
+import re
 from pathlib import Path
+from pprint import pformat
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
@@ -12,13 +14,10 @@ def main() -> None:
 
     html_content = extract_html(url, max_scrolls)
     filtered_content = filter_html(html_content)
-    extracted_divs = extract_div(filtered_content)
+    news_info = extract_news_info(filtered_content)
 
-    print(f"len(extracted_divs) : {len(extracted_divs)}")
-
-    for idx, div in enumerate(extracted_divs[-5:]):
-        print(f"\nidx : {idx+1}\n")
-        print(div)
+    for news in news_info:
+        print(f"\n{pformat(news, sort_dicts=False)}")
 
 
 def extract_html(
@@ -83,18 +82,25 @@ def filter_html(html_content: str) -> BeautifulSoup:
     return soup
 
 
-def extract_div(soup: BeautifulSoup) -> list[str]:
-    """Extract required 'div' elements from filtered HTML content."""
+def extract_news_info(soup: BeautifulSoup) -> list[dict[str, str]]:
+    """Extract publisher info and news content from filtered HTML content."""
 
     div_elements = soup.find_all("div", class_="content")
 
-    # return [div.prettify() for div in div_elements]
-
+    news_info = []
     for div in div_elements:
-        title_element = div.find_all("h3", class_="clamp  yf-82qtw3")
-        news_element = div.find_all("p", class_="clamp  yf-82qtw3")
-        publisher_element = div.find_all("div", class_="publishing")
+        title = div.find("h3", class_="clamp").text
+        content = div.find("p", class_="clamp").text
+        publisher_info = div.find("div", class_="publishing").text
+        publisher, period = get_publisher_info(publisher_info)
 
+        news_info.append(
+            {
+                "publisher": publisher,
+                "period": period,
+                "title": title,
+                "content": content,
+            }
+        )
 
-if __name__ == "__main__":
-    main()
+    return news_info
