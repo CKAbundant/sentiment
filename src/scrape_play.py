@@ -6,6 +6,21 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 
+def main() -> None:
+    url = "https://finance.yahoo.com/quote/AAPL/news/"
+    max_scrolls = 8
+
+    html_content = extract_html(url, max_scrolls)
+    filtered_content = filter_html(html_content)
+    extracted_divs = extract_div(filtered_content)
+
+    print(f"len(extracted_divs) : {len(extracted_divs)}")
+
+    for idx, div in enumerate(extracted_divs[-5:]):
+        print(f"\nidx : {idx+1}\n")
+        print(div)
+
+
 def extract_html(
     url: str = "https://finance.yahoo.com/quote/AAPL/news/", max_scrolls: int = 5
 ) -> str:
@@ -23,7 +38,7 @@ def extract_html(
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
-            page.goto(url)
+            page.goto(url, wait_until="domcontentloaded")
 
             previous_height = page.evaluate("document.body.scrollheight")
             print(f"Initial previous_height : {previous_height}")
@@ -34,7 +49,7 @@ def extract_html(
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 page.wait_for_timeout(2000)
                 new_height = page.evaluate("document.body.scrollHeight")
-                print(f"new_height : {new_height}")
+                print(f"new_height ({scroll_count+1} scroll): {new_height}")
 
                 if new_height == previous_height:
                     break
@@ -73,18 +88,13 @@ def extract_div(soup: BeautifulSoup) -> list[str]:
 
     div_elements = soup.find_all("div", class_="content")
 
-    extracted_divs = [div.prettify() for div in div_elements]
+    # return [div.prettify() for div in div_elements]
 
-    print(f"len(extracted_divs) : {len(extracted_divs)}")
-
-    for idx, div in enumerate(extracted_divs):
-        print(f"\nidx : {idx}\n")
-        print(div)
-
-    return extracted_divs
+    for div in div_elements:
+        title_element = div.find_all("h3", class_="clamp  yf-82qtw3")
+        news_element = div.find_all("p", class_="clamp  yf-82qtw3")
+        publisher_element = div.find_all("div", class_="publishing")
 
 
 if __name__ == "__main__":
-    html_content = extract_html()
-    filtered_content = filter_html(html_content)
-    extracted_divs = extract_div(filtered_content)
+    main()
