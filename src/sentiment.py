@@ -53,7 +53,7 @@ class SentimentRater:
         # Generate sentiment rating for each text in 'text_list' as list of
         # dictionaries i.e. [{'label': <label>, 'score': <score>}, ...]
         results = self.nlp(text_list, top_k=None)
-        print(f"results[:5] : \n\n{pformat(results[:10], sort_dicts=False)}\n")
+        print(f"results[:5] : \n\n{pformat(results[:5], sort_dicts=False)}\n")
 
         return [self.rate_sentiment(result) for result in results]
 
