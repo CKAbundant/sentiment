@@ -1,0 +1,7 @@
+beautifulsoup4==4.13.3
+pandas==2.2.3
+playwright==1.50.0
+pytimeparse==1.1.8
+scrapling==0.2.96
+torch==2.6.0+cpu
+transformers==4.49.0

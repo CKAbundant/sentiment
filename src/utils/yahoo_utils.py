@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-import pytimeparse
+import dateparser
 from scrapling.defaults import Fetcher
 
 
@@ -42,7 +42,7 @@ def extract_news_briefs(url: str) -> list[dict[str, str]]:
         news_info.append(
             {
                 "publisher": str(publisher_info[0].clean()),
-                "period": convert_to_timedelta(period_str),
+                "period": period_str,
                 "title": news[0].clean(),
                 "content": news[1].clean(),
             }
@@ -54,23 +54,25 @@ def extract_news_briefs(url: str) -> list[dict[str, str]]:
 def convert_to_timedelta(period_str: str) -> timedelta | None:
     """Convert time period string into timedelta object."""
 
-    if period_str == "yesterday":
-        period_str = "1 day"
-    else:
-        # Remove 'ago' in 'period_str'
-        period_str = period_str.replace("ago", "").strip()
+    # Get current datetime ignoring
+    now = datetime.now().replace(microsecond=0)
 
-    # Get time period in seconds
-    period_in_seconds = pytimeparse.parse(period_str)
+    # Get adjusted date based on 'period_str' e.g. '2 days ago'
+    adjusted_dt = dateparser.parse(period_str)
 
-    if period_in_seconds is None:
-        print(f"Invalid time period string : {period_str}")
+    if adjusted_dt is None:
+        # 'adjusted_dt' is None if dateparser failed to parse string
+        print(f"Unable to parse '{period_str}'")
         return
 
-    return timedelta(seconds=period_in_seconds)
+    # Get only positive timedelta
+    adjusted_dt = adjusted_dt.replace(microsecond=0)
+    delta = now - adjusted_dt if now > adjusted_dt else adjusted_dt - now
+
+    return delta
 
 
-def cal_pub_date(period: str, scrape_dt: str) -> datetime:
+def cal_pub_date(period: str, scrape_dt: str) -> datetime | None:
     """Compute published date based on 'period' and 'current_dt'.
 
     Args:
@@ -81,8 +83,12 @@ def cal_pub_date(period: str, scrape_dt: str) -> datetime:
             is webscrapped.
 
     Returns:
-        (datetime): Published date in "YYYY-MM-DD' format.
+        (datetime | None): If available, published date in "YYYY-MM-DD' format.
     """
+
+    if not period or not scrape_dt:
+        print(f"'period' or 'scrape_dt' is None.")
+        return
 
     # Convert 'scrape_dt' to datetime object
     scrape_dt = datetime.strptime(scrape_dt, "%Y%m%d_%H%M")

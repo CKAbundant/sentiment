@@ -21,11 +21,8 @@ info. Reason being Scrapling is not able to perform scrolling.
 """
 
 import re
-import sys
 import time
-from datetime import datetime
 from functools import partial
-from pathlib import Path
 
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -34,22 +31,16 @@ from playwright.sync_api import sync_playwright
 from src.sentiment import SentimentRater
 from src.utils import utils, yahoo_utils
 
-# # Add repo directory to sys.path if not exist
-# repo_dir = Path(__file__).parent.as_posix()
-# if repo_dir not in sys.path:
-#     sys.path.append(repo_dir)
 
-
-class Poc:
-    """Generate Proof-of-Concept for sentiment-based strategy:
+class GenData:
+    """Generate DataFrame containing news scrapped from Yahoo Finance:
 
     - Extract news for past 10 days for 'AAPL', 'NVDA', 'PG'.
     - Perform sentiment analysis via FinBert.
-    - Get stock with highest cointegration values with selected stock.
-    - Generate DataFrame indicating 'Buy', 'Sell', 'No Action' for past 10 days
+    - Save DataFrame as 'sentiment.csv'
 
     Usage:
-        >>> poc = Poc() # Use default values
+        >>> gen_data = GenData() # Use default values
         >>> result_df = poc.run()
 
     Args:
@@ -58,9 +49,12 @@ class Poc:
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news").
         stock_list (list[str]):
             List of stocks for POC studies (Default: ["AAPL", "NVDA", "PG"]).
-        max_scroll (int):
+        max_scrolls (int):
             Maximum number of scrolls to extract news article from Yahoo Finance.
-
+        model_list (list[str]):
+            List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
+            "yiyanghkust/finbert-tone", "yiyanghkust/finbert-pretrain",
+            "ZiweiChen/FinBERT-FOMC"]).
 
     Attributes:
         base_url (str):
@@ -68,27 +62,38 @@ class Poc:
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news).
         stock_list (list[str]):
             List of stocks for POC studies (Default: ["AAPL", "NVDA", "PG"]).
-        max_scroll (int):
+        max_scrolls (int):
             Maximum number of scrolls to extract news article from Yahoo Finance.
+        model_list (list[str]):
+            List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
+            "yiyanghkust/finbert-tone", "AventIQ-AI/finbert-sentiment-analysis"]).
     """
 
     def __init__(
         self,
         base_url: str = "https://finance.yahoo.com/quote/ticker/news",
         stock_list: list[str] = ["AAPL", "NVDA", "PG"],
-        max_scroll: int = 8,
+        max_scrolls: int = 8,
+        model_list: str = [
+            "ProsusAI/finbert",  # Financial PhraseBank
+            "yiyanghkust/finbert-tone",  # Analyst reports
+            "ZiweiChen/FinBERT-FOMC",  # FOMC reports
+            "AventIQ-AI/finbert-sentiment-analysis",  # General English quotes
+        ],
     ):
         self.base_url = base_url
         self.stock_list = stock_list
-        self.max_scroll = max_scroll
+        self.max_scrolls = max_scrolls
+        self.model_list = model_list
 
     def run(self) -> pd.DataFrame:
-        """Extract news from Yahoo Finance; and generate sentiment score."""
+        """Generate DataFrame containing news extracted from Yahoo Finance; and
+        generate sentiment score."""
 
-        rater = SentimentRater()
         df_list = []
 
         for ticker in self.stock_list:
+            print(f"\nticker : {ticker}")
             # Get current datetime as "YYYYMM-DD_HHMM" string
             scrape_dt = utils.get_current_dt()
 
@@ -98,16 +103,20 @@ class Poc:
             df_news = self.extract_news_info(filtered_content)
 
             # Append 'ticker', 'pub_date', and 'score' column to DataFrame
-            df_news = self.append_ticker(df_news, ticker)
-            df_news = self.append_pub_date(df_news, scrape_dt)
-            df_news = self.append_finbert_score(df_news, rater)
+            df_news = GenData.append_ticker(df_news, ticker)
+            df_news = GenData.append_pub_date(df_news, scrape_dt)
             df_list.append(df_news)
 
             # Wait 2 seconds for browser to close completely
             time.sleep(2)
 
-        # Combine list of DataFrames row-wise
-        return pd.concat(df_list, axis=0).reset_index(drop=True)
+        # Combine list of DataFrames row-wise and Append sentiment scores
+        # for different rater. Save DataFrame as csv file
+        df_combine = pd.concat(df_list, axis=0).reset_index(drop=True)
+        df_combine = self.append_sentiment_scores(df_combine)
+        df_combine.to_csv("./data/sentiment.csv", index=False)
+
+        return df_combine
 
     def extract_html(self, ticker: str, current_dt: str) -> str:
         """Use Playwright to launch Yahoo Finance news website for selected ticker
@@ -196,7 +205,8 @@ class Poc:
         # by unicode \u2022
         return [item.strip() for item in re.split(r"\u2022", pub_str)]
 
-    def append_ticker(self, df_news: pd.DataFrame, ticker: str) -> pd.DataFrame:
+    @staticmethod
+    def append_ticker(df_news: pd.DataFrame, ticker: str) -> pd.DataFrame:
         """Append 'ticker' column to DataFrame."""
 
         df = df_news.copy()
@@ -204,7 +214,8 @@ class Poc:
 
         return df
 
-    def append_pub_date(self, df_news: pd.DataFrame, scrape_dt: str) -> pd.DataFrame:
+    @staticmethod
+    def append_pub_date(df_news: pd.DataFrame, scrape_dt: str) -> pd.DataFrame:
         """Append published date for each news to DataFrame.
 
         Args:
@@ -227,11 +238,25 @@ class Poc:
 
         return df
 
+    @staticmethod
     def append_finbert_score(
-        self, df_news: pd.DataFrame, rater: SentimentRater
+        df_news: pd.DataFrame, rater: SentimentRater, col_name: str = "sentiment"
     ) -> pd.DataFrame:
         """Append sentiment score (1 to 5) based on news title and content using
-        FinBERT."""
+        FinBERT.
+
+        Args:
+            df_news (pd.DataFrame):
+                DataFrame containing news info.
+            rater (SentimentRater):
+                Instance of SentimentRater to rate news sentiment using a variant
+                of FinBERT.
+            col_name (str):
+                Name of column containing sentiment scores.
+
+        Returns:
+            df (pd.DataFrame): DataFrame with appended sentiment score.
+        """
 
         df = df_news.copy()
 
@@ -239,9 +264,37 @@ class Poc:
         df["news"] = df["title"] + "\n\n" + df["content"]
 
         # Rate sentiment of combined news
-        df["sentiment"] = df["news"].map(rater.classify_sentiment)
+        df[col_name] = rater.classify_sentiment(df["news"].to_list())
 
         # Drop 'news' column
         df = df.drop(columns=["news"])
 
         return df
+
+    def append_sentiment_scores(self, df_news: pd.DataFrame) -> pd.DataFrame:
+        """Append sentiment scores to DataFrame for different FinBERT variant."""
+
+        df = df_news.copy()
+
+        for model_name in self.model_list:
+            # Get column name for sentiment rating
+            col_name = self.get_col_name(model_name)
+
+            rater = SentimentRater(model_name=model_name)
+            print(f"\nmodel_name : {model_name}\n")
+
+            # Append sentiment score to DataFrame
+            df = GenData.append_finbert_score(df, rater, col_name)
+
+        return df
+
+    def get_col_name(self, model_name: str) -> str:
+        """Get column name from hugging face 'model_name'."""
+
+        # Get first part of 'model_name' separated by '/'
+        first_part = model_name.split("/")[0]
+
+        # replace '-' with "_" and lowercase name
+        col_name = first_part.replace("-", "_").lower()
+
+        return col_name
