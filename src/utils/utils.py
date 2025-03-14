@@ -25,7 +25,7 @@ def save_html(html_content: str, file_name: str, data_dir: str = "./data") -> No
 def create_folder(data_dir: str | Path) -> None:
     """Create folder if not exist."""
 
-    data_dir = Path(data_dir).expanduser().resolve()
+    data_dir = Path(data_dir)
 
     if not data_dir.is_dir():
         data_dir.mkdir(parents=True, exist_ok=True)

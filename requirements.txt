@@ -1,7 +1,14 @@
 beautifulsoup4==4.13.3
+dateparser==1.2.1
+matplotlib==3.10.1
+networkx==3.3
 pandas==2.2.3
 playwright==1.50.0
-pytimeparse==1.1.8
+pyrate_limiter==3.7.0
+Requests==2.32.3
+requests_cache==1.2.1
+requests_ratelimiter==0.7.0
 scrapling==0.2.96
-torch==2.6.0+cpu
+statsmodels==0.14.4
 transformers==4.49.0
+yfinance==0.2.54

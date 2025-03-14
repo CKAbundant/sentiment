@@ -1,6 +1,8 @@
 """Class to perform cointegration for S&P 500 stocks"""
 
+import csv
 from itertools import combinations
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -12,6 +14,7 @@ from requests import Session
 from requests_cache import CacheMixin, SQLiteCache
 from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
 from statsmodels.tsa.stattools import coint
+from yfinance.exceptions import YFPricesMissingError
 
 from src.utils import utils
 
@@ -39,9 +42,10 @@ class CoIntegrate:
             Number of tickers to download concurrently (Default: 20).
         ignore_list (list[str]):
             List of stocks to ignore due to data inavailbility in yfinance
-            (Default: ["BRK.B", "BF.B]).
-        data_dir (str):
-            Relative path to data folder (Default: "./data").
+            (Default: ["BRK.B", "BF.B", "CTAS"]).
+        stock_dir (str):
+            Relative path to folder containing stocks OHLCV data
+            (Default: "./data/stock").
 
     Attributes:
         url (str):
@@ -56,7 +60,10 @@ class CoIntegrate:
             Number of tickers to download concurrently (Default: 10).
         ignore_list (list[str]):
             List of stocks to ignore due to data inavailbility in yfinance
-            (Default: ["BRK.B", "BF.B]).
+            (Default: ["BRK.B", "BF.B", "CTAS"]).
+        stock_dir (str):
+            Relative path to folder containing stocks OHLCV data
+            (Default: "./data/stock").
         stock_list (list[str]):
             List containing S&P500 stocks.
         session (CachedLimiterSession):
@@ -64,6 +71,8 @@ class CoIntegrate:
             LimiterMixin and Session.
         cur_dt (str):
             Datetime when cointegration analysis is performed.
+        unsuccessful (list[str]):
+            List of tickers that are unable to be downloaded successfully via yfinance.
     """
 
     def __init__(
@@ -72,30 +81,42 @@ class CoIntegrate:
         start: str = "2020-01-01",
         end: str | None = None,
         batch_size: int = 10,
-        ignore_list: list[str] = ["BRK.B", "BF.B"],
-        data_dir: str = "./data",
+        ignore_list: list[str] = ["BRK.B", "BF.B", "CTAS"],
+        stock_dir: str = "./data/stock",
     ) -> None:
         self.url = url
         self.start = start
         self.end = end
         self.batch_size = batch_size
         self.ignore_list = ignore_list
-        self.data_dir = data_dir
+        self.stock_dir = stock_dir
         self.stock_list = self.gen_stock_list()
         self.session = None
-        self.cur_dt = utils.get_current_dt()
+        self.cur_dt = utils.get_current_dt(fmt="%Y%m%d")
+        self.unsuccessful = []
 
     def run(self) -> None:
         """Download 5 years OHLCV data from yfinance to perform co-integration
         between all pair combinations of S&P500 stocks."""
 
-        # Download OHLCV data from Yahoo Finance
-        df = self.batch_download()
+        # # Download OHLCV data from Yahoo Finance
+        # self.download_tickers()
 
-        # Perform cointegration analysis for 5, 3 and 1 year
-        for num_years in [5, 3, 1]:
-            df_coint = self.cal_cointegration(df, num_years)
-            self.plot_network_graph(df_coint, f"coint_{num_years}yr.png")
+        # tries = 0
+        # max_tries = 3
+
+        # while self.unsuccessful and tries < max_tries:
+        #     # Attempt to download unsuccessful tickers after 20 seconds
+        #     time.sleep(20)
+        #     self.download_tickers(self.unsuccessful)
+        #     tries += 1
+
+        df_coint = self.cal_cointegration(5)
+
+        # # Perform cointegration analysis for 5, 3 and 1 year
+        # for num_years in [5, 3, 1]:
+        #     df_coint = self.cal_cointegration(num_years)
+        #     self.plot_network_graph(df_coint, f"coint_{num_years}yr.png")
 
     def _init_session(self) -> None:
         """Combine 'requests_cache' with rate-limiting to avoid Yahoo's rate-limiter.
@@ -125,158 +146,192 @@ class CoIntegrate:
             if stock not in self.ignore_list
         ]
 
-    def batch_download(self) -> pd.DataFrame:
+    def download_tickers(self, stock_list: list[str] | None = None) -> None:
         """Download about 5 years OHLCV daily data for each S&P500 stocks in batches."""
+
+        stock_list = stock_list or self.stock_list
+
+        # Reset self.unsuccessful
+        self.unsuccessful = []
 
         # Initiate rate limiting caching session if not initialized
         if not self.session:
             self._init_session()
 
-        df_list = []
+        for idx, ticker in enumerate(stock_list):
+            try:
+                # Download OHLCV data in batches with rate limiting and caching
+                df = yf.download(
+                    ticker,
+                    start=self.start,
+                    end=self.end,
+                    rounding=True,
+                    session=self.session,
+                    multi_level_index=False,
+                )
 
-        for count, idx in enumerate(range(0, len(self.stock_list), self.batch_size)):
-            ticker_batch = self.stock_list[idx : idx + self.batch_size]
-            print(f"batch {count+1} : {ticker_batch}")
+                # Format DataFrame; drop duplicates and null values; and sort by index
+                df = df.loc[:, ["Open", "High", "Low", "Close", "Volume"]]
+                df.insert(0, "Ticker", [ticker] * len(df))
+                df = df.dropna().drop_duplicates()
+                df = df.sort_index(ascending=True)
 
-            # Download OHLCV data in batches with rate limiting and caching
-            df = yf.download(
-                ticker_batch,
-                start=self.start,
-                end=self.end,
-                group_by="ticker",
-                rounding=True,
-                session=self.session,
-            )
+                print(f"{idx+1:>5}) {ticker:<6} : {len(df)}\n")
 
-            # Flatten multi-level columns and sort DataFrame
-            df = self._format_df(df)
-            df_list.append(df)
+                # Create subfolder under '/data/stock'
+                subfolder_path = f"{self.stock_dir}/{self.cur_dt}"
+                utils.create_folder(subfolder_path)
 
-        # Combine DataFrame in list to a single DataFrame; and save DataFrame
-        df_combine = pd.concat(df_list, axis=0)
-        df_combine.to_parquet(
-            f"{self.data_dir}/ohlcv_{self.cur_dt}.parquet", index=True
-        )
+                # Save as parquet file
+                df.to_parquet(f"{subfolder_path}/{ticker}.parquet", index=True)
 
-        return df_combine
+            except YFPricesMissingError as e:
+                print(e)
+                self.unsuccessful.append(ticker)
 
-    def _format_df(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Flatten multi-level columns and sort DataFrame by Ticker
-        followed by Date."""
-
-        df = data.copy()
-
-        # Flattened multi-level columns by stacking by 'Ticker' (level 0)
-        df = (
-            df.stack(level=0, future_stack=True)
-            .rename_axis(["Date", "Ticker"])
-            .reset_index(level=1)
-        )
-
-        # Sort DataFrame by 'Ticker' followed by 'Date'
-        df = df.reset_index()
-        df = df.sort_values(by=["Ticker", "Date"], ascending=True)
-        df = df.set_index("Date")
-
-        # Remove name of columns i.e. 'Price'
-        df.columns.name = None
-
-        return df
-
-    def cal_cointegration(self, data: pd.DataFrame, num_years: int) -> pd.DataFrame:
+    def cal_cointegration(
+        self, num_years: int, date: str | None = None
+    ) -> pd.DataFrame:
         """Compute pvalue for cointegration for all pair combinations of S&P500 stocks
         using 'num_years' records.
 
         Args:
-            data (pd.DataFrame):
-                DataFrame containing OHLCV prices of S&P500 stocks for past 5 years.
+            num_years (int): Number of years required to compute cointegration.
+            date (str | None): If provided, date when required parquet files are generated.
 
         Returns:
             (pd.DataFrame):
                 DataFrame containing all pair combinations of S&P500 stocks and its pvalue.
         """
 
-        info = []
+        # Get list of tickers with enough data for cointegration computation
+        updated_list = self.get_enough_period(num_years, date)
 
-        for ticker1, ticker2 in combinations(self.stock_list, 2):
-            # Get equal length 'Close' price for both tickers
-            close1, close2 = self._gen_timeseries(data, ticker1, ticker2, num_years)
+        file_path = f"{self.stock_dir}/coint_5y_{self.cur_dt}.csv"
+        fieldnames = [
+            "ticker1",
+            "ticker2",
+            "pvalue",
+            "coint_t",
+            "percent_1",
+            "percent_5",
+            "percent_10",
+            "cointegrate",
+        ]
 
-            # Get pvalue via 'coint'
-            _, pvalue, _ = coint(close1, close2)
+        with open(file_path, "w", newline="") as file:
+            if not Path(file_path).is_file():
+                # Create csv file with header if not exist
+                writer = csv.DictWriter(file, fieldnames=fieldnames)
+                writer.writeheader()
 
-            info.append(
-                {
-                    "ticker1": ticker1,
-                    "ticker2": ticker2,
-                    "pvalue": pvalue,
-                    "cointegrate": 1 if pvalue <= 0.05 else 0,
-                }
-            )
+        with open(file_path, "a", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
 
-        # Convert 'info' list to DataFrame; and save as csv file
-        df_info = pd.DataFrame(info)
-        df_info.to_csv(f"{self.data_dir}/coint_{self.cur_dt}.csv", index=False)
+            for ticker1, ticker2 in combinations(updated_list, 2):
+                print(f"{ticker1}-{ticker2}")
 
-        return df_info
+                try:
+                    # Get equal length 'Close' price for both tickers
+                    df_close = self._gen_timeseries(ticker1, ticker2, num_years, date)
+
+                    # Get pvalue via 'coint'
+                    coint_t, pvalue, crit_value = coint(
+                        df_close[ticker1], df_close[ticker2]
+                    )
+
+                    # Append row to csv file
+                    writer.writerow(
+                        {
+                            "ticker1": ticker1,
+                            "ticker2": ticker2,
+                            "pvalue": pvalue,
+                            "coint_t": coint_t,
+                            "percent_1": crit_value[0],
+                            "percent_5": crit_value[1],
+                            "percent_10": crit_value[2],
+                            "cointegrate": 1 if pvalue <= 0.05 else 0,
+                        }
+                    )
+
+                except Exception as e:
+                    print(f"Error encountered for {ticker1}-{ticker2} : {e}")
+
+        # Load DataFrame from csv file
+        return pd.read_csv(file_path)
+
+    def get_enough_period(self, num_years: int, date: str | None = None) -> list[str]:
+        """Identify list of tickers that have enough data for 'num_years'
+        number of years.
+
+        Args:
+            num_years (int): Number of years required to compute cointegration.
+            date (str | None): If provided, date when required parquet files are generated.
+
+        Returns:
+            (list[str]): List of tickers with enough data points.
+        """
+
+        return [
+            ticker
+            for ticker in self.stock_list
+            if self.is_enough(ticker, num_years, date)
+        ]
 
     def _gen_timeseries(
-        self, data: pd.DataFrame, ticker1: str, ticker2: str, num_years: int
-    ) -> tuple[pd.Series, pd.Series] | None:
+        self, ticker1: str, ticker2: str, num_years: int, date: str | None = None
+    ) -> pd.DataFrame | None:
         """Generate equal length timeseries of Pandas Series Type based on given
         tickers and number of years.
 
         Args:
-            data (pd.DataFrame): DataFrame containing OHLCV of all S&P500 stocks.
             ticker1 (str): First stock ticker.
             ticker2 (str): Second stock ticker.
             num_years (int): Number of years required to compute cointegration.
+            date (str | None): If provided, date when required parquet files are generated.
 
         Returns:
-            timeseries1 (pd.Series): If available, first time series.
-            timeseries2 (pd.Series): If available, second time series.
+            df (pd.DataFrame): DataFrame containing closing price for both tickers.
         """
 
-        df = data.copy()
+        date = date or self.cur_dt
 
-        # Get latest date in DataFrame. All tickers will have the same latest date.
-        latest_date = df.index.max()
+        # Load DataFrame for both tickers
+        df1 = pd.read_parquet(f"{self.stock_dir}/{date}/{ticker1}.parquet")
+        df2 = pd.read_parquet(f"{self.stock_dir}/{date}/{ticker2}.parquet")
 
-        # Get required earliest date i.e. latest_date - 'num_years'
-        req_earliest_date = latest_date - pd.DateOffset(years=num_years)
+        # Concat Panda Series for closing price for both tickers to form a DataFrame
+        df = pd.concat([df1["Close"], df2["Close"]], axis=1)
+        df.columns = [ticker1, ticker2]
 
-        # Get DataFrame for ticker1 and ticker2; and remove null values
-        df1 = df.loc[(df["Ticker"] == ticker1) & (~df.isna()), ["Ticker", "Close"]]
-        df2 = df.loc[(df["Ticker"] == ticker2) & (~df.isna()), ["Ticker", "Close"]]
+        # Drop null values
+        df = df.dropna()
 
-        # Get list of earliest available date for ticker1 and ticker2
-        earliest_list = [df1.index.min(), df2.index.min()]
+        return df
 
-        if any([earliest_date < req_earliest_date for earliest_date in earliest_list]):
-            print(
-                f"Not enough data for {num_years} years to compute cointegration for {ticker1}-{ticker2} pair!"
-            )
-            return
+    def is_enough(self, ticker: str, num_years: int, date: str | None = None) -> bool:
+        """Check whether there is enough data for cointegration computation.
 
-        # Filter DataFrames to start from req_earliest_date
-        df1 = df1.loc[df1.index >= req_earliest_date, :]
-        df2 = df2.loc[df2.index >= req_earliest_date, :]
+        Args:
+            ticker (str): Stock ticker
+            num_years (int): Number of years required to compute cointegration.
+            date (str | None): If provided, date when required parquet files are generated.
 
-        # Get common index for df1 and df2
-        common_index = self._get_equal_timeseries(df1, df2)
+        Returns:
+            (bool): True if there is enough data.
+        """
 
-        return df1.loc[common_index, "Close"], df2.loc[common_index, "Close"]
+        date = date or self.cur_dt
 
-    def _get_equal_timeseries(
-        self, df1: pd.DataFrame, df2: pd.DataFrame
-    ) -> list[pd.Timestamp]:
-        """Ensure both DataFrame have same datetime index value."""
+        # Load DataFrame from parquet file
+        df = pd.read_parquet(f"{self.stock_dir}/{date}/{ticker}.parquet")
 
-        # Get the intersection of both index
-        common_set = set(df1.index) & set(df2.index)
+        # Compute required earliest date
+        earliest = df.index.min()
+        latest = df.index.max()
+        req_earliest = latest - pd.DateOffset(years=num_years)
 
-        # Convert to list and sort in ascending order
-        return sorted(list(common_set))
+        return earliest <= req_earliest
 
     def plot_network_graph(
         self, data: pd.DataFrame, png_name: str, threshold: float = 0.05
