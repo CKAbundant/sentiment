@@ -2,14 +2,15 @@
 
 import random
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 
 
-def get_current_dt() -> str:
-    """Return current datetime as string with 'YYYYMMDD_HHMM' format."""
+def get_current_dt(fmt: str = "%Y%m%d_%H%M") -> str:
+    """Return current datetime as string with 'specific' format."""
 
-    return datetime.now().strftime("%Y%m%d_%H%M")
+    return datetime.now().strftime(fmt)
 
 
 def save_html(html_content: str, file_name: str, data_dir: str = "./data") -> None:
@@ -19,6 +20,15 @@ def save_html(html_content: str, file_name: str, data_dir: str = "./data") -> No
 
     with open(file_path, "w") as file:
         file.write(html_content)
+
+
+def create_folder(data_dir: str | Path) -> None:
+    """Create folder if not exist."""
+
+    data_dir = Path(data_dir)
+
+    if not data_dir.is_dir():
+        data_dir.mkdir(parents=True, exist_ok=True)
 
 
 def gen_stock_list(
