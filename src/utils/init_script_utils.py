@@ -8,7 +8,9 @@ import re
 from pprint import pformat
 from typing import Any
 
-from playwright.sync_api import Page
+from playwright.sync_api import Page, Route
+
+from src.utils import scraper_utils
 
 
 def set_webdriver_undefined(page: Page) -> None:
@@ -40,32 +42,6 @@ def remove_webdriver(page: Page) -> None:
     )
 
 
-def set_fake_plugins(page: Page) -> None:
-    """Set navigator.plugins to fake plugins list."""
-
-    if not hasattr(page, "add_init_script"):
-        raise ValueError("Invalid 'page' object. Expect a Playwright Page instance.")
-
-    plugins = {
-        "0": {"0": {}, "1": {}},
-        "1": {"0": {}, "1": {}},
-        "2": {"0": {}, "1": {}},
-        "3": {"0": {}, "1": {}},
-        "4": {"0": {}, "1": {}},
-    }
-
-    # Serialize Python dictionary to JSON for injection into JavaScript
-    plugins_js = json.dumps(plugins)
-
-    page.add_init_script(
-        f"""
-        Object.defineProperty(navigator, 'plugins', {{
-            get: () => {plugins_js}
-        }});
-        """
-    )
-
-
 def set_languages(page: Page) -> None:
     """Set navigator.languages to standard ['en-US', 'en']."""
 
@@ -89,7 +65,6 @@ def set_window_navigator_chrome(page: Page, user_agent: str) -> None:
 
     # Get runtime dictionary based on 'user_agent'
     runtime = get_runtime(user_agent)
-    print(f"\nuser_agent : {user_agent}")
     print(f"runtime : {pformat(runtime, sort_dicts=False)}\n")
 
     page.add_init_script(
@@ -101,24 +76,6 @@ def set_window_navigator_chrome(page: Page, user_agent: str) -> None:
         }};
         """
     )
-
-
-def get_processor_architecture() -> str:
-    """Get processor architecture of device that will be running the Bot test."""
-
-    arch = platform.machine().lower()
-
-    match arch:
-        case "amd64" | "x86_64":
-            return "x86-64"
-        case "aarch64":
-            return "arm64"
-        case "arm":
-            return "arm"
-        case "i386" | "i686":
-            return "x86-32"
-        case _:
-            return arch  # Unknown architecture
 
 
 def get_runtime(user_agent: str) -> str:
@@ -139,7 +96,7 @@ def get_runtime(user_agent: str) -> str:
         )
 
     # Get processor architecture
-    proc_arch = get_processor_architecture()
+    proc_arch = scraper_utils.get_processor_architecture()
 
     # Update processor architecture to 'runtime' dictionary
     arch_dict = {
@@ -154,28 +111,25 @@ def get_runtime(user_agent: str) -> str:
             return runtime
 
 
-def rotate_software_webgl(page: Page) -> None:
+def rotate_webgl(page: Page) -> None:
     """Rotate software web GL renderer for non-hardware acceleration."""
 
     # List of webGL renderers for non hardware acceleration
-    renderers = [
-        "Google SwiftShader",
-        "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
-    ]
+    renderers = scraper_utils.gen_webgl_list()
 
     # Randomly select one software webGL renderers from available list
     webgl = random.choice(renderers)
+    print(f"webgl : {webgl}")
 
     page.add_init_script(
         f"""
         const getParameter = WebGLRenderingContext.prototype.getParameter;
-        WebGLRenderingContext.prototype.get
+        WebGLRenderingContext.prototype.getParameter = function (parameter) {{
+            if (parameter === 37445) return {webgl};
+            return getParameter.call(this, parameter);
+        }}
         """
     )
-
-
-def rotate_webgl(page: Page, user_agent: str) -> None:
-    """Rotate web GL renderer based on 'user_agent'."""
 
 
 def set_stealth_plugins(page: Page) -> None:
@@ -190,38 +144,35 @@ def set_stealth_plugins(page: Page) -> None:
     random_num = random.random()
 
     # Core plugins i.e. Chromium PDF Viewer
-    plugins = [
-        {
+    plugins = {
+        "0": {
             "name": "Chromium PDF Viewer",
             "description": "Portable Document Format",
             "filename": "mhjfbmdgcfjbbpaeojofohoefgiehjai",
         }
-    ]
+    }
 
     # Add Native Client (~90% probability)
     if random_num < 0.9:
-        plugins.append(
-            {
-                "name": "Native Client",
-                "description": "native Client Execution",
-                "filename": "internal-nacl-plugin",
-            }
-        )
+        plugins["1"] = {
+            "name": "Native Client",
+            "description": "native Client Execution",
+            "filename": "internal-nacl-plugin",
+        }
 
     # Add PDF Viewer (1-5% probability)
     if random_num < random.uniform(0.01, 0.05):
-        plugins.append(
-            {
-                "name": "PDF Viewer",
-                "description": "Portable Document Format",
-                "filename": "oemmndcbldboiebfnladdacbdfmadadm",
-            }
-        )
+        plugins["2"] = {
+            "name": "PDF Viewer",
+            "description": "Portable Document Format",
+            "filename": "oemmndcbldboiebfnladdacbdfmadadm",
+        }
 
     # Update 'mimeTypes' for 'Chrome PDF Viewer' and 'PDF Viewer'; and convert to
     # json string
     plugins = append_mimetypes(plugins)
     plugins_js = json.dumps(plugins)
+    print(f"\nplugins : \n\n{pformat(plugins, sort_dicts=False)}\n")
 
     page.add_init_script(
         f"""
@@ -233,23 +184,33 @@ def set_stealth_plugins(page: Page) -> None:
     )
 
 
-def append_mimetypes(plugins: list[dict[str, str]]) -> list[dict[str, Any]]:
+def throttle_tcp(page: Page) -> None:
+    """Intercept HTTP requests and introduce human delays before continuing them."""
+
+    def delay_request(route: Route) -> None:
+        scraper_utils.human_delay()
+        route.continue_()
+
+    page.route("**/*", delay_request)
+
+
+def append_mimetypes(plugins: dict[str, dict[str, str]]) -> dict[str, dict[str, Any]]:
     """Update plugins with 'mimeTypes' dictionary for 'Chrome PDF Viewer'
     and 'PDF Viewer'.
 
     Args:
-        plugins (list[dict[str, str]]):
+        plugins (dict[str, dict[str, str]]):
             List containing 'Chrome PDF Viewer', 'Native Client' and 'PDF Viewer'
             dictionary containing 'name', 'description' and 'filename' keys.
 
     Returns:
-        updated_plugins (list[dict[str, Any]]):
+        updated_plugins (dict[str, dict[str, Any]]):
             Plugins updated with 'mimeTypes' info.
     """
 
-    updated_plugins = []
+    updated_plugins = {}
 
-    for plugin in plugins:
+    for idx, plugin in plugins.items():
         # Update only for Chromium PDF Viewer and PDF Viewer
         if plugin["name"] in ["Chromium PDF Viewer", "PDF Viewer"]:
             plugin["mimeTypes"] = [
@@ -265,6 +226,6 @@ def append_mimetypes(plugins: list[dict[str, str]]) -> list[dict[str, Any]]:
                 },
             ]
 
-        updated_plugins.append(plugin)
+        updated_plugins[idx] = plugin
 
     return updated_plugins
