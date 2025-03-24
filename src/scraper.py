@@ -167,7 +167,6 @@ def run(
             "--start-maximized",
         ],
     )
-    # page = browser.new_page()
 
     # Create new context instead of using browser directly
     context = browser.new_context(
@@ -180,13 +179,14 @@ def run(
     )
     page = context.new_page()
 
-    # # Override browser properties to mimic read user
-    # init_script_utils.remove_webdriver(page)
-    # init_script_utils.set_stealth_plugins(page)
-    # init_script_utils.rotate_webgl(page)
-    # init_script_utils.set_languages(page)
-    # init_script_utils.set_window_navigator_chrome(page, user_agent)
-    # init_script_utils.throttle_TCP(page)
+    # Override browser properties to mimic read user
+    init_script_utils.remove_webdriver(page)
+    # init_script_utils.set_webdriver_undefined(page)
+    init_script_utils.set_stealth_plugins(page)
+    init_script_utils.rotate_webgl(page)
+    init_script_utils.set_languages(page)
+    init_script_utils.set_window_navigator_chrome(page, user_agent)
+    init_script_utils.throttle_tcp(page)
 
     # browser = playwright.chromium.launch(headless=False)
     # page = browser.new_page()
@@ -215,7 +215,7 @@ def run(
         print(f"Login did not redirect as expected. Current URL: {page.url}")
 
     html_content = page.content()
-    page.wait_for_timeout(20000)
+    page.wait_for_timeout(10000)
     browser.close()
 
     return html_content

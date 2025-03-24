@@ -115,7 +115,7 @@ def rotate_webgl(page: Page) -> None:
     """Rotate software web GL renderer for non-hardware acceleration."""
 
     # List of webGL renderers for non hardware acceleration
-    renderers = scraper_utils.gen_webgl_list()
+    renderers = scraper_utils.gen_webgl_list(proc_family="amd")
 
     # Randomly select one software webGL renderers from available list
     webgl = random.choice(renderers)
@@ -184,11 +184,12 @@ def set_stealth_plugins(page: Page) -> None:
     )
 
 
-def throttle_tcp(page: Page) -> None:
+def throttle_tcp(page: Page, min_ms: int = 500, max_ms: int = 800) -> None:
     """Intercept HTTP requests and introduce human delays before continuing them."""
 
     def delay_request(route: Route) -> None:
-        scraper_utils.human_delay()
+        delay = random.randint(min_ms, max_ms)
+        page.wait_for_timeout(delay)
         route.continue_()
 
     page.route("**/*", delay_request)
