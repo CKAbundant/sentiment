@@ -1,6 +1,7 @@
 """Class to perform cointegration for S&P 500 stocks"""
 
 import csv
+import time
 from itertools import combinations
 from pathlib import Path
 
@@ -104,24 +105,13 @@ class CoIntegrate:
         """Download 5 years OHLCV data from yfinance to perform co-integration
         between all pair combinations of S&P500 stocks."""
 
-        # # Download OHLCV data from Yahoo Finance
-        # self.download_tickers()
+        # Download OHLCV data from Yahoo Finance
+        self.retry_download_tickers()
 
-        # tries = 0
-        # max_tries = 3
-
-        # while self.unsuccessful and tries < max_tries:
-        #     # Attempt to download unsuccessful tickers after 20 seconds
-        #     time.sleep(20)
-        #     self.download_tickers(self.unsuccessful)
-        #     tries += 1
-
-        df_coint = self.cal_cointegration(5)
-
-        # # Perform cointegration analysis for 5, 3 and 1 year
-        # for num_years in [5, 3, 1]:
-        #     df_coint = self.cal_cointegration(num_years)
-        #     self.plot_network_graph(df_coint, f"coint_{num_years}yr.png")
+        # Perform cointegration analysis for 5, 3 and 1 year
+        for num_years in [5, 3, 1]:
+            df_coint = self.cal_cointegration(num_years)
+            # self.plot_network_graph(df_coint, f"coint_{num_years}yr.png")
 
         return df_coint
 
@@ -139,6 +129,20 @@ class CoIntegrate:
             bucket_class=MemoryQueueBucket,
             backend=SQLiteCache("yfinance.cache"),
         )
+
+    def retry_download_tickers(self) -> pd.DataFrame:
+        """Download tickers for cointegration computation with retry mechanism."""
+
+        self.download_tickers()
+
+        tries = 0
+        max_tries = 3
+
+        while self.unsuccessful and tries < max_tries:
+            # Attempt to download unsuccessful tickers after 20 seconds
+            time.sleep(20)
+            self.download_tickers(self.unsuccessful)
+            tries += 1
 
     def gen_stock_list(self) -> list[str]:
         """Generate updated list of S&P500 stocks from given url."""
@@ -245,14 +249,13 @@ class CoIntegrate:
         # Get list of tickers with enough data for cointegration computation
         updated_list = self.get_enough_period(num_years)
 
-        # If subfolder exist, skip computation of cointegration since it is already available
+        # If file exist, skip computation of cointegration since it is already available
         subfolder = f"{self.coint_dir}/{self.end_date}"
         file_path = f"{subfolder}/coint_{num_years}y.csv"
-
-        if Path(subfolder).is_dir():
+        if Path(file_path).is_file():
             return pd.read_csv(file_path)
 
-        # Create folder
+        # Ensure subfolder exist
         utils.create_folder(subfolder)
 
         fieldnames = [
