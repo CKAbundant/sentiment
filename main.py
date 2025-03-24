@@ -11,7 +11,6 @@ if repo_dir not in sys.path:
     sys.path.append(repo_dir)
 
 from src.gen_data import GenData
-from src.sentiment import SentimentRater
 
 
 def main() -> None:
