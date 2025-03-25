@@ -1,6 +1,8 @@
 """Generic helper functions"""
 
+import math
 import random
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -84,3 +86,46 @@ def get_gics_sector(
         ticker: df_info.loc[df_info["Symbol"] == ticker, "GICS Sector"].item()
         for ticker in tickers
     }
+
+
+def gen_text_chunks(news_list: list[str], max_size: int = 512) -> list[list[str]]:
+    """Chunk list of texts in order to meet maximum token_size of 512.
+
+    Args:
+        news_list (list[str]): list of text string representing news heading and brief.
+        max_token_size (int): Maximum token size for FinBERT transformer (Default: 512).
+
+    Returns:
+        chunks (list[list[str]]: list of text chunks containing news article strings.
+    """
+
+    # Number of words in 'news_list'
+    total_words = count_total_words(news_list)
+
+    # Ensure text chunks do not exceed max_size by computing chunk factor
+    chunk_factor = math.ceil(total_words / max_size)
+
+    # Get size of each chunk
+    chunk_size = len(news_list) // chunk_factor
+
+    chunks = []
+    for idx in range(0, len(news_list), chunk_size):
+        chunks.append(news_list[idx : idx + chunk_size])
+
+
+def count_total_words(news_list: list[str]) -> int:
+    """Count total number of words in news list"""
+
+    total_count = 0
+
+    for news in news_list:
+        # Split each text in 'news_list' into words
+        word_list = news.split()
+
+        # Perform word count for each text in 'news_list'
+        counter = Counter(word_list)
+        word_count = sum(counter.values())
+
+        total_count += word_count
+
+    return total_count

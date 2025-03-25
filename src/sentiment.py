@@ -2,7 +2,12 @@
 
 from pprint import pformat
 
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    Pipeline,
+    pipeline,
+)
 
 
 class SentimentRater:
@@ -24,6 +29,7 @@ class SentimentRater:
 
     Attributes:
         model_name (str): Name of Hugging Face model (Default: "ProsusAI/finbert").
+        nlp (Pipeline): Hugging Face sentiment analysis pipeline.
         model (AutoModelForSequenceClassification): FinBERT model from huggingface.
         tokenizer (AutoTokenizer): FinBERT tokenizer from huggingface.
     """

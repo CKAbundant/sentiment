@@ -24,6 +24,7 @@ info. Reason being Scrapling is not able to perform scrolling.
 import re
 import time
 from functools import partial
+from pprint import pformat
 
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -94,7 +95,7 @@ class GenData:
             "BAC",
             "BA",
         ],
-        max_scrolls: int = 20,
+        max_scrolls: int = 15,
         model_list: str = [
             "ProsusAI/finbert",  # Financial PhraseBank
             "yiyanghkust/finbert-tone",  # Analyst reports
@@ -128,14 +129,18 @@ class GenData:
             df_news = GenData.append_pub_date(df_news, scrape_dt)
             df_list.append(df_news)
 
+            print(f"\n\ndf_news [{ticker}] : \n\n{df_news}\n")
+
             # Wait 2 seconds for browser to close completely
             time.sleep(2)
 
         # Combine list of DataFrames row-wise and Append sentiment scores
         # for different rater. Save DataFrame as csv file
         df_combine = pd.concat(df_list, axis=0).reset_index(drop=True)
-        df_combine = self.append_sentiment_scores(df_combine)
-        df_combine.to_csv("./data/sentiment.csv", index=False)
+        df_combine.to_csv("./data/news.csv", index=False)
+
+        # df_combine = self.append_sentiment_scores(df_combine)
+        # df_combine.to_csv("./data/sentiment.csv", index=False)
 
         return df_combine
 
@@ -230,10 +235,13 @@ class GenData:
         """Get publisher and period lapsed since news published from
         text extracted via BeautifulSoup."""
 
-        if not pub_str:
+        print(f"pub_str : {pub_str}")
+
+        if pub_str is None:
             return ["Not available", "Not available"]
-        
-        if r"\u2022" in 
+
+        if not re.search(r"\u2022", pub_str):
+            return [pub_str, "Not available"]
 
         # Publisher is separated from period by "•" i.e. bullet point represented
         # by unicode \u2022
@@ -294,21 +302,41 @@ class GenData:
 
         df = df_news.copy()
 
-        # Replace "Not available" with empty string for 'title' and 'content' columns
-        df["title"] = df["title"].str.replace("Not available", "")
-        df["content"] = df["content"].str.replace("Not available", "")
-
-        # Combine title and content; and strip white spaces
+        # Combine title and content; and format combined text string
         df["news"] = df["title"] + "\n\n" + df["content"]
-        df["news"] = df["news"].str.strip()
+        df["news"] = df["news"].map(GenData.format_news)
 
-        # Rate sentiment of combined news
-        df[col_name] = rater.classify_sentiment(df["news"].to_list())
+        print(f"\n\ndf['news'].to_list() : \n\n{pformat(df['news'].to_list())}\n")
+
+        # Chunk the list of news article strings to meet max token limit
+        chunks = utils.gen_text_chunks(df["news"].to_list())
+
+        # Rate sentiment of combined news in chunks
+        senti_list = []
+        for chunk in chunks:
+            senti_list.extend(rater.classify_sentiment(chunk))
+
+        # Append sentiment rating to DataFrame
+        df[col_name] = senti_list
 
         # Drop 'news' column
         df = df.drop(columns=["news"])
 
         return df
+
+    @staticmethod
+    def format_news(news_str: str) -> str:
+        """Return 'Not available' if duplicates of 'Not available' exists; Remove 'Not available if only 1 copy of 'Not available' is found in text string."""
+
+        count = len(re.findall(r"Not available", news_str))
+
+        if count > 1:
+            return "News is not available"
+
+        if count == 1:
+            return re.sub(r"Not available", "", news_str).strip()
+
+        return news_str
 
     def append_sentiment_scores(self, df_news: pd.DataFrame) -> pd.DataFrame:
         """Append sentiment scores to DataFrame for different FinBERT variant."""
