@@ -13,7 +13,7 @@ def get_current_dt(fmt: str = "%Y%m%d_%H%M") -> str:
     return datetime.now().strftime(fmt)
 
 
-def save_html(html_content: str, file_name: str, data_dir: str = "./data") -> None:
+def save_html(html_content: str, file_name: str, data_dir: str = "./data/html") -> None:
     """Save HTML content as html file under 'data_dir' folder."""
 
     file_path = f"{data_dir}/{file_name}"

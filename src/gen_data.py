@@ -1,7 +1,9 @@
 """Class to generate Proof-of-Concept for sentiment-based strategy:
 
 1. Get 'publisher', 'period' (time lapsed since news published), 'title',
-and 'content' for AAPL, NVDA and PG for past 10 days.
+and 'content' for "AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "TESLA", "JPM",
+"JNJ", "V", "XOM", "UNH", "WMT", "PG", "HD", "NFLX", "CRM", "BAC", and "BA" for
+past 10 days.
 2. Get overall sentiment for each stock for each day via FinBERT.
 3. Determine 'co_integ' stock (i.e. stock that has highest cointegration
 value with selected stock)
@@ -12,8 +14,7 @@ Note:
 1. Overall sentiment for the day is taken since time of news release is not available.
 There is possibility similiar news are released concurrently by different publisher.
 Hence we are not able to estimate the stock price.
-2. We selected 'AAPL', 'NVDA' and 'PG' for a start. Ideally we should be getting 1
-stock from each of GICS Sector.
+2. Stocks selected are supposed to have news published on a frequent basis.
 3. We assume news sentiment may vary within 10 days for the selected stocks.
 4. We use Playwright to perform webscrolling on Yahoo Finance to capture the overall
 HTML content first. Then we use BeautifulSoup to extract relevant news and publisher
@@ -48,9 +49,9 @@ class GenData:
             URL to Yahoo Finance to specifics stock news by replacing 'ticker' with
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news").
         stock_list (list[str]):
-            List of stocks for POC studies (Default: ["AAPL", "NVDA", "PG"]).
+            List of stocks for POC studies (Default: ["AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "TESLA", "JPM", "JNJ", "V", "XOM", "UNH", "WMT", "PG", "HD", "NFLX", "CRM", "BAC", "BA"]).
         max_scrolls (int):
-            Maximum number of scrolls to extract news article from Yahoo Finance.
+            Maximum number of scrolls to extract news article from Yahoo Finance (Default: 20).
         model_list (list[str]):
             List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
             "yiyanghkust/finbert-tone", "yiyanghkust/finbert-pretrain",
@@ -61,9 +62,9 @@ class GenData:
             URL to Yahoo Finance to specifics stock news by replacing 'ticker' with
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news).
         stock_list (list[str]):
-            List of stocks for POC studies (Default: ["AAPL", "NVDA", "PG"]).
+            List of stocks for POC studies (Default: ["AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "TESLA", "JPM", "JNJ", "V", "XOM", "UNH", "WMT", "PG", "HD", "NFLX", "CRM", "BAC", "BA"]).
         max_scrolls (int):
-            Maximum number of scrolls to extract news article from Yahoo Finance.
+            Maximum number of scrolls to extract news article from Yahoo Finance (Default: 20).
         model_list (list[str]):
             List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
             "yiyanghkust/finbert-tone", "AventIQ-AI/finbert-sentiment-analysis"]).
@@ -72,8 +73,28 @@ class GenData:
     def __init__(
         self,
         base_url: str = "https://finance.yahoo.com/quote/ticker/news",
-        stock_list: list[str] = ["AAPL", "NVDA", "PG"],
-        max_scrolls: int = 8,
+        stock_list: list[str] = [
+            "AAPL",
+            "NVDA",
+            "MSFT",
+            "AMZN",
+            "GOOGL",
+            "META",
+            "TESLA",
+            "JPM",
+            "JNJ",
+            "V",
+            "XOM",
+            "UNH",
+            "WMT",
+            "PG",
+            "HD",
+            "NFLX",
+            "CRM",
+            "BAC",
+            "BA",
+        ],
+        max_scrolls: int = 20,
         model_list: str = [
             "ProsusAI/finbert",  # Financial PhraseBank
             "yiyanghkust/finbert-tone",  # Analyst reports
@@ -181,9 +202,9 @@ class GenData:
 
         news_info = []
         for div in div_elements:
-            title = div.find("h3", class_="clamp").text
-            content = div.find("p", class_="clamp").text
-            publisher_info = div.find("div", class_="publishing").text
+            title = self.get_text_info(div, "h3", "clamp")
+            content = self.get_text_info(div, "p", "clamp")
+            publisher_info = self.get_text_info(div, "div", "publishing")
             publisher, period = self.get_publisher_info(publisher_info)
 
             news_info.append(
@@ -197,9 +218,22 @@ class GenData:
 
         return pd.DataFrame(news_info)
 
+    def get_text_info(self, div_element: str, tag: str, class_name: str) -> str:
+        """Get text infomation from respective HTML tags and class name."""
+
+        try:
+            return div_element.find(tag, class_=class_name).text
+        except:
+            return "Not available"
+
     def get_publisher_info(self, pub_str: str) -> list[str]:
         """Get publisher and period lapsed since news published from
         text extracted via BeautifulSoup."""
+
+        if not pub_str:
+            return ["Not available", "Not available"]
+        
+        if r"\u2022" in 
 
         # Publisher is separated from period by "•" i.e. bullet point represented
         # by unicode \u2022
@@ -260,8 +294,13 @@ class GenData:
 
         df = df_news.copy()
 
-        # Combine 'title' and 'content' column with 2 cartridge returns
+        # Replace "Not available" with empty string for 'title' and 'content' columns
+        df["title"] = df["title"].str.replace("Not available", "")
+        df["content"] = df["content"].str.replace("Not available", "")
+
+        # Combine title and content; and strip white spaces
         df["news"] = df["title"] + "\n\n" + df["content"]
+        df["news"] = df["news"].str.strip()
 
         # Rate sentiment of combined news
         df[col_name] = rater.classify_sentiment(df["news"].to_list())
