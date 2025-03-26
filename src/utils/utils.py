@@ -102,15 +102,17 @@ def gen_text_chunks(news_list: list[str], max_size: int = 512) -> list[list[str]
     # Number of words in 'news_list'
     total_words = count_total_words(news_list)
 
-    # Ensure text chunks do not exceed max_size by computing chunk factor
-    chunk_factor = math.ceil(total_words / max_size)
+    # Average words in each news string
+    av_words_per_news = math.ceil(total_words / len(news_list))
 
-    # Get size of each chunk
-    chunk_size = len(news_list) // chunk_factor
+    # Max number of items in each chunk
+    chunk_size = math.floor(max_size / av_words_per_news)
 
     chunks = []
     for idx in range(0, len(news_list), chunk_size):
         chunks.append(news_list[idx : idx + chunk_size])
+
+    return chunks
 
 
 def count_total_words(news_list: list[str]) -> int:

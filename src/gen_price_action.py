@@ -24,7 +24,9 @@ only the closing price of co-integrated stock.
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+import pandas_market_calendars as mcal
 
 from src.cointegrate import CoIntegrate
 from src.utils import utils
@@ -38,8 +40,6 @@ class GenPriceAction:
         >>> df = gen_price_action()
 
     Args:
-        ticker (str):
-            Stock ticker e.g. "AAPL".
         date (str):
             If provided, date when cointegration is performed.
         senti_path (str):
@@ -55,8 +55,6 @@ class GenPriceAction:
             Top N number of stocks with lowest pvalue.
 
     Attributes:
-        ticker (str):
-            Stock ticker e.g. "AAPL".
         date (str):
             If provided, date when cointegration is performed.
         coint_path (str):
@@ -76,7 +74,6 @@ class GenPriceAction:
 
     def __init__(
         self,
-        ticker: str,
         date: str | None = None,
         senti_path: str = "./data/sentiment.csv",
         stock_dir: str = "./data/stock",
@@ -84,7 +81,6 @@ class GenPriceAction:
         model_name: str = "ziweichen",
         top_n: int = 10,
     ) -> None:
-        self.ticker = ticker
         self.date = date or utils.get_current_dt(fmt="Y%m%d")
         self.coint_path = f"./data/coint/{self.date}/coint_5y.csv"
         self.senti_path = senti_path
@@ -107,13 +103,18 @@ class GenPriceAction:
             )
 
             # Group by publication date and compute mean sentiment rating
-            df_av = self.cal_mean_sentiment(df_ticker)
+            df_av = self.cal_mean_sentiment(df_ticker, ticker)
+
+            # Append 'is_holiday', 'ticker' and 'weekday'
+            df_av = self.append_is_holiday(df_av)
+            df_av = self.append_dayname(df_av)
+            df_av.insert(0, "ticker", [ticker] * len(df_av))
 
             # Append closing price of ticker
-            df_av = self.append_close(df_av)
+            df_av = self.append_close(df_av, ticker)
 
             # Append closing price of top N co-integrated stocks with lowest pvalue
-            self.gen_topn_close(df_av)
+            self.gen_topn_close(df_av, ticker)
 
     def load_coint(self) -> pd.DataFrame:
         """Load cointegration CSV file as DataFrame if available else generate
@@ -126,48 +127,84 @@ class GenPriceAction:
         cointegrate = CoIntegrate()
         return cointegrate.run()
 
-    def cal_mean_sentiment(self, data: pd.DataFrame) -> pd.DataFrame:
+    def cal_mean_sentiment(self, data: pd.DataFrame, ticker: str) -> pd.DataFrame:
         """Compute the average sentiment and average sentiment (excluding rating 3)
         for each trading day"""
 
         df = data.copy()
-        ticker = df.at[0, "ticker"]
 
         # Generate 'date' column from 'pub_date' by extracting out the date
         # i.e. exclude time component
         df["pub_date"] = pd.to_datetime(df["pub_date"])
-        df["date"] = df["pub_date"].dt.date()
+        df["date"] = df["pub_date"].dt.date
 
         # Exclude news with rating 3
         df_exclude = df.loc[df[self.model_name] != 3, :]
 
         # Get Pandas Series of mean ratings (with and without rating 3)
         series_incl = df.groupby(by=["date"])[self.model_name].mean()
-        series_excl = df_exclude.groupby(by=["date"])[self.model_name].mean()
+        series_excl = df_exclude.groupby(by=["date"])[self.model_name].median()
 
         # Generate DataFrame by concatenating 'series_incl' and 'series_excl'
         df_av = pd.concat([series_incl, series_excl], axis=1)
-        df_av.columns = ["av_rating", "av_rating_excl"]
-        df_av.insert(0, "ticker", [ticker] * len(df_av))
+        df_av.columns = ["av_rating", "median_rating_excl"]
 
         return df_av
 
-    def append_close(self, data: pd.DataFrame) -> pd.DataFrame:
+    def append_dayname(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Append 'day_name' column i.e. from 'Monday' to 'Sunday' based on
+        'date' index."""
+
+        df = data.copy()
+
+        # Set 'date' index as column; and set as datetime type
+        df = df.reset_index()
+        df["date"] = pd.to_datetime(df["date"])
+
+        # Insert 'day' column and set 'date' as index
+        day_name = df["date"].dt.day_name()
+        df.insert(0, "day_name", day_name)
+        df = df.set_index("date")
+
+        return df
+
+    def append_is_holiday(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Append 'is_holiday' column i.e. from 'Monday' to 'Sunday' based on
+        'date' index."""
+
+        df = data.copy()
+
+        # Get holidays for NYSE since 2020
+        nyse = mcal.get_calendar("NYSE")
+        holidays = nyse.holidays().holidays
+        holidays_since_2024 = [
+            holiday for holiday in holidays if holiday >= np.datetime64("2024-01-01")
+        ]
+
+        # Extract date index as list of np.datetime64 objects
+        date_list = [np.datetime64(dt.date()) for dt in df.index.to_list()]
+
+        # Append whether date is holiday
+        df.insert(0, "is_holiday", [dt in holidays_since_2024 for dt in date_list])
+
+        return df
+
+    def append_close(self, data: pd.DataFrame, ticker: str) -> pd.DataFrame:
         """Append closing price of stock ticker."""
 
         df = data.copy()
-        ticker = df["ticker"].unique()[0]
 
         # Load OHLCV prices for ticker
         ohlcv_path = f"{self.stock_dir}/{ticker}.parquet"
         df_ohlcv = pd.read_parquet(ohlcv_path)
+        df_ohlcv.index = pd.DatetimeIndex(df_ohlcv.index)
 
         # Append closing price of 'ticker'
         df[f"{ticker}_close"] = df_ohlcv.loc[df_ohlcv.index.isin(df.index), "Close"]
 
         return df
 
-    def gen_topn_close(self, data: pd.DataFrame) -> None:
+    def gen_topn_close(self, data: pd.DataFrame, ticker: str) -> None:
         """Generate Dataframe for each 'top_n' cointegrated stocks with lowest pvalue.
 
         Args:
@@ -180,7 +217,6 @@ class GenPriceAction:
         """
 
         df = data.copy()
-        ticker = df["ticker"].unique()[0]
 
         # Get list of cointegrated stocks with lowest pvalue
         coint_list = self.get_topn_tickers(ticker)

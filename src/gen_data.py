@@ -1,7 +1,7 @@
 """Class to generate Proof-of-Concept for sentiment-based strategy:
 
 1. Get 'publisher', 'period' (time lapsed since news published), 'title',
-and 'content' for "AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "TESLA", "JPM",
+and 'content' for "AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "TSLA", "JPM",
 "JNJ", "V", "XOM", "UNH", "WMT", "PG", "HD", "NFLX", "CRM", "BAC", and "BA" for
 past 10 days.
 2. Get overall sentiment for each stock for each day via FinBERT.
@@ -50,30 +50,35 @@ class GenData:
             URL to Yahoo Finance to specifics stock news by replacing 'ticker' with
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news").
         stock_list (list[str]):
-            List of stocks for POC studies (Default: ["AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "TESLA", "JPM", "JNJ", "V", "XOM", "UNH", "WMT", "PG", "HD", "NFLX", "CRM", "BAC", "BA"]).
+            List of stocks for POC studies (Default: ["AAPL", "NVDA", "MSFT", "AMZN",
+            "GOOGL", "META", "TSLA", "JPM", "JNJ", "V", "XOM", "UNH", "WMT", "PG",
+            "HD", "NFLX", "CRM", "BAC", "BA"]).
         max_scrolls (int):
             Maximum number of scrolls to extract news article from Yahoo Finance (Default: 20).
         model_list (list[str]):
             List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
-            "yiyanghkust/finbert-tone", "yiyanghkust/finbert-pretrain",
-            "ZiweiChen/FinBERT-FOMC"]).
+            "yiyanghkust/finbert-tone", "ZiweiChen/FinBERT-FOMC",
+            "AventIQ-AI/finbert-sentiment-analysis"]).
 
     Attributes:
         base_url (str):
             URL to Yahoo Finance to specifics stock news by replacing 'ticker' with
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news).
         stock_list (list[str]):
-            List of stocks for POC studies (Default: ["AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "TESLA", "JPM", "JNJ", "V", "XOM", "UNH", "WMT", "PG", "HD", "NFLX", "CRM", "BAC", "BA"]).
+            List of stocks for POC studies (Default: ["AAPL", "NVDA", "MSFT", "AMZN",
+            "GOOGL", "META", "TSLA", "JPM", "JNJ", "V", "XOM", "UNH", "WMT", "PG",
+            "HD", "NFLX", "CRM", "BAC", "BA"]).
         max_scrolls (int):
             Maximum number of scrolls to extract news article from Yahoo Finance (Default: 20).
         model_list (list[str]):
             List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
-            "yiyanghkust/finbert-tone", "AventIQ-AI/finbert-sentiment-analysis"]).
+            "yiyanghkust/finbert-tone", "ZiweiChen/FinBERT-FOMC",
+            "AventIQ-AI/finbert-sentiment-analysis"]).
     """
 
     def __init__(
         self,
-        base_url: str = "https://finance.yahoo.com/quote/ticker/news",
+        base_url: str = "https://finance.yahoo.com/quote/{ticker}/news",
         stock_list: list[str] = [
             "AAPL",
             "NVDA",
@@ -81,7 +86,7 @@ class GenData:
             "AMZN",
             "GOOGL",
             "META",
-            "TESLA",
+            "TSLA",
             "JPM",
             "JNJ",
             "V",
@@ -112,35 +117,36 @@ class GenData:
         """Generate DataFrame containing news extracted from Yahoo Finance; and
         generate sentiment score."""
 
-        df_list = []
+        # df_list = []
 
-        for ticker in self.stock_list:
-            print(f"\nticker : {ticker}")
-            # Get current datetime as "YYYYMM-DD_HHMM" string
-            scrape_dt = utils.get_current_dt()
+        # for ticker in self.stock_list:
+        #     print(f"\nticker : {ticker}")
+        #     # Get current datetime as "YYYYMM-DD_HHMM" string
+        #     scrape_dt = utils.get_current_dt()
 
-            # Generate DataFrame containing news info for each ticker
-            html_content = self.extract_html(ticker, scrape_dt)
-            filtered_content = self.filter_html(html_content)
-            df_news = self.extract_news_info(filtered_content)
+        #     # Generate DataFrame containing news info for each ticker
+        #     html_content = self.extract_html(ticker, scrape_dt)
+        #     filtered_content = self.filter_html(html_content)
+        #     df_news = self.extract_news_info(filtered_content)
 
-            # Append 'ticker', 'pub_date', and 'score' column to DataFrame
-            df_news = GenData.append_ticker(df_news, ticker)
-            df_news = GenData.append_pub_date(df_news, scrape_dt)
-            df_list.append(df_news)
+        #     # Append 'ticker', 'pub_date', and 'score' column to DataFrame
+        #     df_news = GenData.append_ticker(df_news, ticker)
+        #     df_news = GenData.append_pub_date(df_news, scrape_dt)
+        #     df_list.append(df_news)
 
-            print(f"\n\ndf_news [{ticker}] : \n\n{df_news}\n")
+        #     # Wait 2 seconds for browser to close completely
+        #     time.sleep(2)
 
-            # Wait 2 seconds for browser to close completely
-            time.sleep(2)
+        # # Combine list of DataFrames row-wise and Append sentiment scores
+        # # for different rater. Save DataFrame as csv file
+        # df_combine = pd.concat(df_list, axis=0).reset_index(drop=True)
+        # df_combine.to_csv("./data/news.csv", index=False)
 
-        # Combine list of DataFrames row-wise and Append sentiment scores
-        # for different rater. Save DataFrame as csv file
-        df_combine = pd.concat(df_list, axis=0).reset_index(drop=True)
-        df_combine.to_csv("./data/news.csv", index=False)
+        df_combine = pd.read_csv("./data/news.csv")
 
-        # df_combine = self.append_sentiment_scores(df_combine)
-        # df_combine.to_csv("./data/sentiment.csv", index=False)
+        # Append sentiment scores for various FinBERT models
+        df_combine = self.append_sentiment_scores(df_combine)
+        df_combine.to_csv("./data/sentiment.csv", index=False)
 
         return df_combine
 
@@ -150,7 +156,7 @@ class GenData:
         """
 
         # Replace 'ticker' with actual stock symbol
-        url = self.base_url.replace("ticker", ticker)
+        url = self.base_url.format(ticker=ticker)
 
         with sync_playwright() as p:
             # Playwright to launch google chrome and load url
@@ -235,8 +241,6 @@ class GenData:
         """Get publisher and period lapsed since news published from
         text extracted via BeautifulSoup."""
 
-        print(f"pub_str : {pub_str}")
-
         if pub_str is None:
             return ["Not available", "Not available"]
 
@@ -306,18 +310,18 @@ class GenData:
         df["news"] = df["title"] + "\n\n" + df["content"]
         df["news"] = df["news"].map(GenData.format_news)
 
-        print(f"\n\ndf['news'].to_list() : \n\n{pformat(df['news'].to_list())}\n")
+        # # Chunk the list of news article strings to meet max token limit
+        # chunks = utils.gen_text_chunks(df["news"].to_list())
 
-        # Chunk the list of news article strings to meet max token limit
-        chunks = utils.gen_text_chunks(df["news"].to_list())
+        # # Rate sentiment of combined news in chunks
+        # senti_list = []
+        # for chunk in chunks:
+        #     senti_list.extend(rater.classify_sentiment(chunk))
 
-        # Rate sentiment of combined news in chunks
-        senti_list = []
-        for chunk in chunks:
-            senti_list.extend(rater.classify_sentiment(chunk))
+        # # Append sentiment rating to DataFrame
+        # df[col_name] = senti_list
 
-        # Append sentiment rating to DataFrame
-        df[col_name] = senti_list
+        df[col_name] = rater.classify_sentiment(df["news"].to_list())
 
         # Drop 'news' column
         df = df.drop(columns=["news"])
