@@ -92,7 +92,7 @@ class CoIntegrate:
     ) -> None:
         self.url = url
         self.start_date = start_date
-        self.end_date = end_date or utils.get_current_dt(fmt="%Y%m%d")
+        self.end_date = end_date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.batch_size = batch_size
         self.ignore_list = ignore_list
         self.stock_dir = stock_dir
@@ -184,7 +184,7 @@ class CoIntegrate:
 
                 # Save as parquet file
                 utils.create_folder(self.stock_dir)
-                df.to_parquet(f"{self.stock_dir}/{ticker}.parquet", index=True)
+                df.to_parquet(file_path, index=True)
 
             except YFPricesMissingError as e:
                 print(e)
@@ -203,11 +203,12 @@ class CoIntegrate:
 
         # Download latest OHLCV data in batches with rate limiting and caching
         df_latest = self.download_ticker(ticker, start_date=latest_date)
-        assert df.columns == df_latest.columns
+        assert df.columns.to_list() == df_latest.columns.to_list()
 
-        # Concatenate 'df_latest' to 'df' row-wise; remove duplicate and sort by index
+        # Concatenate 'df_latest' to 'df' row-wise; remove duplicates and sort by index
         df = pd.concat([df, df_latest], axis=0)
         df = df.drop_duplicates()
+        df = df.loc[~df.index.duplicated(keep="last"), :]
         df = df.sort_index(ascending=True)
 
         return df

@@ -27,6 +27,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pandas_market_calendars as mcal
+from tqdm import tqdm
 
 from src.cointegrate import CoIntegrate
 from src.utils import utils
@@ -37,7 +38,7 @@ class GenPriceAction:
 
     Usage:
         >>> gen_price_action = GenPriceAction("AAPL")
-        >>> df = gen_price_action()
+        >>> df = gen_price_action.run()
 
     Args:
         date (str):
@@ -50,7 +51,7 @@ class GenPriceAction:
         results_dir (str):
             Relative path to 'results' folder (Default: "./data/results").
         model_name (str):
-            Name of FinBERT model in HuggingFace (Default: "ziweichen").
+            Name of FinBERT model in Huggi[ngFace (Default: "ziweichen").
         top_n (int):
             Top N number of stocks with lowest pvalue.
 
@@ -81,7 +82,7 @@ class GenPriceAction:
         model_name: str = "ziweichen",
         top_n: int = 10,
     ) -> None:
-        self.date = date or utils.get_current_dt(fmt="Y%m%d")
+        self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.coint_path = f"./data/coint/{self.date}/coint_5y.csv"
         self.senti_path = senti_path
         self.stock_dir = stock_dir
@@ -89,14 +90,14 @@ class GenPriceAction:
         self.model_name = model_name
         self.top_n = top_n
 
-    def __call__(self) -> pd.DataFrame:
-        """Generate DataFrame including average sentiment rating and closing price
-        of stock and co-integrated stock."""
+    def run(self) -> None:
+        """Generate and save DataFrame including average sentiment rating and
+        closing price of stock and co-integrated stock."""
 
         # Load 'sentiment.csv'
         df_senti = pd.read_csv(self.senti_path)
 
-        for ticker in df_senti["ticker"].unique():
+        for ticker in tqdm(df_senti["ticker"].unique()):
             # Filter specific ticker
             df_ticker = df_senti.loc[df_senti["ticker"] == ticker, :].reset_index(
                 drop=True
@@ -149,6 +150,11 @@ class GenPriceAction:
         df_av = pd.concat([series_incl, series_excl], axis=1)
         df_av.columns = ["av_rating", "median_rating_excl"]
 
+        # Replace null value in 'median_rating_excl' with 3.0 since all the news
+        # articles have rating of 3 on the same day are excluded. Hence median will
+        # return null.
+        df_av = df_av.fillna(3)
+
         return df_av
 
     def append_dayname(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -182,7 +188,7 @@ class GenPriceAction:
         ]
 
         # Extract date index as list of np.datetime64 objects
-        date_list = [np.datetime64(dt.date()) for dt in df.index.to_list()]
+        date_list = [np.datetime64(dt) for dt in df.index.to_list()]
 
         # Append whether date is holiday
         df.insert(0, "is_holiday", [dt in holidays_since_2024 for dt in date_list])
@@ -197,7 +203,8 @@ class GenPriceAction:
         # Load OHLCV prices for ticker
         ohlcv_path = f"{self.stock_dir}/{ticker}.parquet"
         df_ohlcv = pd.read_parquet(ohlcv_path)
-        df_ohlcv.index = pd.DatetimeIndex(df_ohlcv.index)
+        df_ohlcv.index = pd.to_datetime(df_ohlcv.index)
+        df.index = pd.to_datetime(df.index)
 
         # Append closing price of 'ticker'
         df[f"{ticker}_close"] = df_ohlcv.loc[df_ohlcv.index.isin(df.index), "Close"]
@@ -205,7 +212,8 @@ class GenPriceAction:
         return df
 
     def gen_topn_close(self, data: pd.DataFrame, ticker: str) -> None:
-        """Generate Dataframe for each 'top_n' cointegrated stocks with lowest pvalue.
+        """Generate and save Dataframe for each 'top_n' cointegrated stocks with
+        lowest pvalue.
 
         Args:
             data (pd.DataFrame):
@@ -225,9 +233,25 @@ class GenPriceAction:
             # Generate and save DataFrame for each cointegrated stock
             df_coint_ticker = self.append_coint_close(df, coint_ticker=coint_ticker)
 
+            # Append price-action i.e. buy if rating is >=4; sell if rating is <=2
+            df_coint_ticker["action"] = df_coint_ticker["median_rating_excl"].map(
+                self.gen_price_action
+            )
+
             subfolder = f"{self.results_dir}/{self.date}"
+            utils.create_folder(subfolder)
+
             file_path = f"{subfolder}/{ticker}_{coint_ticker}.csv"
-            df_coint_ticker.to_parquet(file_path, index=True)
+            df_coint_ticker.to_csv(file_path, index=True)
+
+    def gen_price_action(self, rating: int) -> str:
+        """Return 'buy' if rating > 4, 'sell' if rating <= 2  else 'wait'."""
+
+        if rating >= 4:
+            return "buy"
+        if rating <= 2:
+            return "sell"
+        return "wait"
 
     def get_topn_tickers(self, ticker: str) -> list[str]:
         """Get list of top N stock with lowest pvalue for cointegration test with 'ticker'."""
@@ -261,6 +285,10 @@ class GenPriceAction:
         # Load OHLCV prices for ticker
         ohlcv_path = f"{self.stock_dir}/{coint_ticker}.parquet"
         df_ohlcv = pd.read_parquet(ohlcv_path)
+
+        # Ensure both df.index and df_ohlcv are datetime objects
+        df.index = pd.to_datetime(df.index)
+        df_ohlcv.index = pd.to_datetime(df_ohlcv.index)
 
         # Append closing price of 'ticker'
         df[f"{coint_ticker}_close"] = df_ohlcv.loc[

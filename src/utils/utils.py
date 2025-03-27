@@ -88,33 +88,6 @@ def get_gics_sector(
     }
 
 
-def gen_text_chunks(news_list: list[str], max_size: int = 512) -> list[list[str]]:
-    """Chunk list of texts in order to meet maximum token_size of 512.
-
-    Args:
-        news_list (list[str]): list of text string representing news heading and brief.
-        max_token_size (int): Maximum token size for FinBERT transformer (Default: 512).
-
-    Returns:
-        chunks (list[list[str]]: list of text chunks containing news article strings.
-    """
-
-    # Number of words in 'news_list'
-    total_words = count_total_words(news_list)
-
-    # Average words in each news string
-    av_words_per_news = math.ceil(total_words / len(news_list))
-
-    # Max number of items in each chunk
-    chunk_size = math.floor(max_size / av_words_per_news)
-
-    chunks = []
-    for idx in range(0, len(news_list), chunk_size):
-        chunks.append(news_list[idx : idx + chunk_size])
-
-    return chunks
-
-
 def count_total_words(news_list: list[str]) -> int:
     """Count total number of words in news list"""
 
