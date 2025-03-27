@@ -2,7 +2,12 @@
 
 from pprint import pformat
 
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    Pipeline,
+    pipeline,
+)
 
 
 class SentimentRater:
@@ -24,6 +29,7 @@ class SentimentRater:
 
     Attributes:
         model_name (str): Name of Hugging Face model (Default: "ProsusAI/finbert").
+        nlp (Pipeline): Hugging Face sentiment analysis pipeline.
         model (AutoModelForSequenceClassification): FinBERT model from huggingface.
         tokenizer (AutoTokenizer): FinBERT tokenizer from huggingface.
     """
@@ -40,7 +46,9 @@ class SentimentRater:
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         self.model = AutoModelForSequenceClassification.from_pretrained(self.model_name)
         self.nlp = pipeline(
-            "sentiment-analysis", model=self.model, tokenizer=self.tokenizer
+            "sentiment-analysis",
+            model=self.model,
+            tokenizer=self.tokenizer,
         )
 
     def classify_sentiment(self, text_list: list[str]) -> list[int]:
@@ -52,8 +60,8 @@ class SentimentRater:
 
         # Generate sentiment rating for each text in 'text_list' as list of
         # dictionaries i.e. [{'label': <label>, 'score': <score>}, ...]
-        results = self.nlp(text_list, top_k=None)
-        print(f"results[:5] : \n\n{pformat(results[:5], sort_dicts=False)}\n")
+        results = self.nlp(text_list, top_k=None, truncation=True, max_length=512)
+        # print(f"results[:5] : \n\n{pformat(results[:5], sort_dicts=False)}\n")
 
         return [self.rate_sentiment(result) for result in results]
 

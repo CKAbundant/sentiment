@@ -86,8 +86,15 @@ def cal_pub_date(period: str, scrape_dt: str) -> datetime | None:
         (datetime | None): If available, published date in "YYYY-MM-DD' format.
     """
 
-    if not period or not scrape_dt:
-        print(f"'period' or 'scrape_dt' is None.")
+    if (
+        period is None
+        or scrape_dt is None
+        or period == "Not available"
+        or scrape_dt == "Not available"
+    ):
+        print(
+            f"period : {period if period is not None else "None"}, scrape_dt : {scrape_dt if scrape_dt is not None else "None"}"
+        )
         return
 
     # Convert 'scrape_dt' to datetime object

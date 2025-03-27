@@ -1,7 +1,9 @@
 """Class to generate Proof-of-Concept for sentiment-based strategy:
 
 1. Get 'publisher', 'period' (time lapsed since news published), 'title',
-and 'content' for AAPL, NVDA and PG for past 10 days.
+and 'content' for "AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "TSLA", "JPM",
+"JNJ", "V", "XOM", "UNH", "WMT", "PG", "HD", "NFLX", "CRM", "BAC", and "BA" for
+past 10 days.
 2. Get overall sentiment for each stock for each day via FinBERT.
 3. Determine 'co_integ' stock (i.e. stock that has highest cointegration
 value with selected stock)
@@ -12,8 +14,7 @@ Note:
 1. Overall sentiment for the day is taken since time of news release is not available.
 There is possibility similiar news are released concurrently by different publisher.
 Hence we are not able to estimate the stock price.
-2. We selected 'AAPL', 'NVDA' and 'PG' for a start. Ideally we should be getting 1
-stock from each of GICS Sector.
+2. Stocks selected are supposed to have news published on a frequent basis.
 3. We assume news sentiment may vary within 10 days for the selected stocks.
 4. We use Playwright to perform webscrolling on Yahoo Finance to capture the overall
 HTML content first. Then we use BeautifulSoup to extract relevant news and publisher
@@ -48,32 +49,57 @@ class GenData:
             URL to Yahoo Finance to specifics stock news by replacing 'ticker' with
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news").
         stock_list (list[str]):
-            List of stocks for POC studies (Default: ["AAPL", "NVDA", "PG"]).
+            List of stocks for POC studies (Default: ["AAPL", "NVDA", "MSFT", "AMZN",
+            "GOOGL", "META", "TSLA", "JPM", "JNJ", "V", "XOM", "UNH", "WMT", "PG",
+            "HD", "NFLX", "CRM", "BAC", "BA"]).
         max_scrolls (int):
-            Maximum number of scrolls to extract news article from Yahoo Finance.
+            Maximum number of scrolls to extract news article from Yahoo Finance (Default: 20).
         model_list (list[str]):
             List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
-            "yiyanghkust/finbert-tone", "yiyanghkust/finbert-pretrain",
-            "ZiweiChen/FinBERT-FOMC"]).
+            "yiyanghkust/finbert-tone", "ZiweiChen/FinBERT-FOMC",
+            "AventIQ-AI/finbert-sentiment-analysis"]).
 
     Attributes:
         base_url (str):
             URL to Yahoo Finance to specifics stock news by replacing 'ticker' with
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news).
         stock_list (list[str]):
-            List of stocks for POC studies (Default: ["AAPL", "NVDA", "PG"]).
+            List of stocks for POC studies (Default: ["AAPL", "NVDA", "MSFT", "AMZN",
+            "GOOGL", "META", "TSLA", "JPM", "JNJ", "V", "XOM", "UNH", "WMT", "PG",
+            "HD", "NFLX", "CRM", "BAC", "BA"]).
         max_scrolls (int):
-            Maximum number of scrolls to extract news article from Yahoo Finance.
+            Maximum number of scrolls to extract news article from Yahoo Finance (Default: 20).
         model_list (list[str]):
             List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
-            "yiyanghkust/finbert-tone", "AventIQ-AI/finbert-sentiment-analysis"]).
+            "yiyanghkust/finbert-tone", "ZiweiChen/FinBERT-FOMC",
+            "AventIQ-AI/finbert-sentiment-analysis"]).
     """
 
     def __init__(
         self,
-        base_url: str = "https://finance.yahoo.com/quote/ticker/news",
-        stock_list: list[str] = ["AAPL", "NVDA", "PG"],
-        max_scrolls: int = 8,
+        base_url: str = "https://finance.yahoo.com/quote/{ticker}/news",
+        stock_list: list[str] = [
+            "AAPL",
+            "NVDA",
+            "MSFT",
+            "AMZN",
+            "GOOGL",
+            "META",
+            "TSLA",
+            "JPM",
+            "JNJ",
+            "V",
+            "XOM",
+            "UNH",
+            "WMT",
+            "PG",
+            "HD",
+            "NFLX",
+            "CRM",
+            "BAC",
+            "BA",
+        ],
+        max_scrolls: int = 15,
         model_list: str = [
             "ProsusAI/finbert",  # Financial PhraseBank
             "yiyanghkust/finbert-tone",  # Analyst reports
@@ -113,6 +139,11 @@ class GenData:
         # Combine list of DataFrames row-wise and Append sentiment scores
         # for different rater. Save DataFrame as csv file
         df_combine = pd.concat(df_list, axis=0).reset_index(drop=True)
+        df_combine.to_csv("./data/news.csv", index=False)
+
+        df_combine = pd.read_csv("./data/news.csv")
+
+        # Append sentiment scores for various FinBERT models
         df_combine = self.append_sentiment_scores(df_combine)
         df_combine.to_csv("./data/sentiment.csv", index=False)
 
@@ -124,7 +155,7 @@ class GenData:
         """
 
         # Replace 'ticker' with actual stock symbol
-        url = self.base_url.replace("ticker", ticker)
+        url = self.base_url.format(ticker=ticker)
 
         with sync_playwright() as p:
             # Playwright to launch google chrome and load url
@@ -181,9 +212,9 @@ class GenData:
 
         news_info = []
         for div in div_elements:
-            title = div.find("h3", class_="clamp").text
-            content = div.find("p", class_="clamp").text
-            publisher_info = div.find("div", class_="publishing").text
+            title = self.get_text_info(div, "h3", "clamp")
+            content = self.get_text_info(div, "p", "clamp")
+            publisher_info = self.get_text_info(div, "div", "publishing")
             publisher, period = self.get_publisher_info(publisher_info)
 
             news_info.append(
@@ -197,9 +228,23 @@ class GenData:
 
         return pd.DataFrame(news_info)
 
+    def get_text_info(self, div_element: str, tag: str, class_name: str) -> str:
+        """Get text infomation from respective HTML tags and class name."""
+
+        try:
+            return div_element.find(tag, class_=class_name).text
+        except:
+            return "Not available"
+
     def get_publisher_info(self, pub_str: str) -> list[str]:
         """Get publisher and period lapsed since news published from
         text extracted via BeautifulSoup."""
+
+        if pub_str is None:
+            return ["Not available", "Not available"]
+
+        if not re.search(r"\u2022", pub_str):
+            return [pub_str, "Not available"]
 
         # Publisher is separated from period by "•" i.e. bullet point represented
         # by unicode \u2022
@@ -242,8 +287,10 @@ class GenData:
     def append_finbert_score(
         df_news: pd.DataFrame, rater: SentimentRater, col_name: str = "sentiment"
     ) -> pd.DataFrame:
-        """Append sentiment score (1 to 5) based on news title and content using
-        FinBERT.
+        """Append sentiment score (1 to 5) using FinBERT based on:
+        - news title & content
+        - news title only
+        - news content only
 
         Args:
             df_news (pd.DataFrame):
@@ -252,7 +299,7 @@ class GenData:
                 Instance of SentimentRater to rate news sentiment using a variant
                 of FinBERT.
             col_name (str):
-                Name of column containing sentiment scores.
+                Name of column containing sentiment scores (Default: "sentiment").
 
         Returns:
             df (pd.DataFrame): DataFrame with appended sentiment score.
@@ -260,16 +307,34 @@ class GenData:
 
         df = df_news.copy()
 
-        # Combine 'title' and 'content' column with 2 cartridge returns
+        # Combine title and content; and format combined text string
         df["news"] = df["title"] + "\n\n" + df["content"]
+        df["news"] = df["news"].map(GenData.format_news)
 
-        # Rate sentiment of combined news
+        # Classify sentiment based on news title & content; news title only and
+        # news content only
         df[col_name] = rater.classify_sentiment(df["news"].to_list())
+        df[f"{col_name}_title"] = rater.classify_sentiment(df["title"].to_list())
+        df[f"{col_name}_content"] = rater.classify_sentiment(df["content"].to_list())
 
         # Drop 'news' column
         df = df.drop(columns=["news"])
 
         return df
+
+    @staticmethod
+    def format_news(news_str: str) -> str:
+        """Return 'Not available' if duplicates of 'Not available' exists; Remove 'Not available if only 1 copy of 'Not available' is found in text string."""
+
+        count = len(re.findall(r"Not available", news_str))
+
+        if count > 1:
+            return "News is not available"
+
+        if count == 1:
+            return re.sub(r"Not available", "", news_str).strip()
+
+        return news_str
 
     def append_sentiment_scores(self, df_news: pd.DataFrame) -> pd.DataFrame:
         """Append sentiment scores to DataFrame for different FinBERT variant."""
