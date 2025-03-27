@@ -36,8 +36,10 @@ def main() -> None:
 
     # Compile profit and loss
     cal_pl = CalProfitLoss(date="2025-03-26")
-    df_results = cal_pl.run()
+    df_results, df_overall, df_breakdown = cal_pl.run()
     print(f"df_results : \n\n{df_results}\n")
+    print(f"df_overall : \n\n{df_overall}\n")
+    print(f"df_breakdown : \n\n{df_breakdown}\n")
 
 
 if __name__ == "__main__":

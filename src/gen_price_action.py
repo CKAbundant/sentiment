@@ -104,7 +104,7 @@ class GenPriceAction:
             )
 
             # Group by publication date and compute mean sentiment rating
-            df_av = self.cal_mean_sentiment(df_ticker, ticker)
+            df_av = self.cal_mean_sentiment(df_ticker)
 
             # Append 'is_holiday', 'ticker' and 'weekday'
             df_av = self.append_is_holiday(df_av)
@@ -128,7 +128,7 @@ class GenPriceAction:
         cointegrate = CoIntegrate()
         return cointegrate.run()
 
-    def cal_mean_sentiment(self, data: pd.DataFrame, ticker: str) -> pd.DataFrame:
+    def cal_mean_sentiment(self, data: pd.DataFrame) -> pd.DataFrame:
         """Compute the average sentiment and average sentiment (excluding rating 3)
         for each trading day"""
 
@@ -196,7 +196,7 @@ class GenPriceAction:
         return df
 
     def append_close(self, data: pd.DataFrame, ticker: str) -> pd.DataFrame:
-        """Append closing price of stock ticker."""
+        """Append closing price of stock ticker whose news are sentiment-rated."""
 
         df = data.copy()
 
@@ -219,6 +219,8 @@ class GenPriceAction:
             data (pd.DataFrame):
                 DataFrame containing average sentiment rating and closing price
                 for ticker.
+            ticker (str):
+                Stock ticker whose news are sentiment-rated.
 
         Returns:
             None.
@@ -242,7 +244,7 @@ class GenPriceAction:
             utils.create_folder(subfolder)
 
             file_path = f"{subfolder}/{ticker}_{coint_ticker}.csv"
-            df_coint_ticker.to_csv(file_path, index=True)
+            utils.save_csv(df_coint_ticker, file_path, save_index=True)
 
     def gen_price_action(self, rating: int) -> str:
         """Return 'buy' if rating > 4, 'sell' if rating <= 2  else 'wait'."""

@@ -17,9 +17,11 @@ Considerations
 """
 
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Optional
 
+import numpy as np
 import pandas as pd
 from pydantic import BaseModel, Field, computed_field, field_validator
 from tqdm import tqdm
@@ -32,18 +34,31 @@ class StockTrade(BaseModel):
     coint_ticker: str = Field(description="Cointegrated stock ticker.")
     action: str = Field(description="Either 'buy' or 'sell'", default="buy")
     entry_date: date = Field(description="Date when opening long position")
-    entry_price: float = Field(description="Price when opening long position")
+    entry_price: Decimal = Field(description="Price when opening long position")
     exit_date: Optional[date] = Field(
         description="Date when exiting long position", default=None
     )
-    exit_price: Optional[float] = Field(
+    exit_price: Optional[Decimal] = Field(
         description="Price when exiting long position", default=None
     )
 
     @computed_field(description="Profit & loss once trade completed")
-    def profit_loss(self) -> Optional[float]:
+    def profit_loss(self) -> Optional[Decimal]:
         if self.exit_price is not None and self.entry_price is not None:
             return self.exit_price - self.entry_price
+        return
+
+    @computed_field(description="Number of days held for trade")
+    def days_held(self) -> Optional[int]:
+        if self.exit_date is not None and self.entry_date is not None:
+            days_held = self.exit_date - self.entry_date
+            return days_held.days
+        return
+
+    @computed_field(description="Whether trade is profitable")
+    def win(self) -> Optional[int]:
+        if (pl := self.profit_loss) is not None:
+            return int(pl > 0)
         return
 
     model_config = {"validate_assignment": True}
@@ -52,8 +67,9 @@ class StockTrade(BaseModel):
     def validate_exit_date(
         cls, exit_date: Optional[date], info: dict[str, Any]
     ) -> Optional[date]:
-        if exit_date and exit_date < info.data["entry_date"]:
-            raise ValueError("Exit date must be after entry date!")
+        if exit_date and (entry_date := info.data.get("entry_date")):
+            if exit_date < entry_date:
+                raise ValueError("Exit date must be after entry date!")
         return exit_date
 
 
@@ -91,9 +107,23 @@ class CalProfitLoss:
         self.num_open = 0
         self.no_trades = []
 
-    def run(self) -> pd.DataFrame | None:
-        """Generate and save DataFrame containing completed trades for all price action
-        csv files in selected folder."""
+    def run(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame] | None:
+        """Generate and saved completed trades and summary statistics as
+        DataFrames.
+
+        Args:
+            None.
+
+        Returns:
+            df_results (pd.DataFrame):
+                DataFrame containing completed trades for all price action
+                csv files in selected folder.
+            df_summary (pd.DataFrame):
+                DataFrame containing overall statistics for sentiment strategy.
+            df_breakdown (pd.DataFrame):
+                DataFrame containing breakdown of statistics for each
+                ticker-cointegrated ticker pair.
+        """
 
         if not Path(self.results_dir).is_dir():
             print(f"'{self.results_dir}' folder doesn't exist.")
@@ -109,10 +139,7 @@ class CalProfitLoss:
 
         for file_path in tqdm(files_list):
             # Load price action csv file
-            df = pd.read_csv(file_path)
-
-            # Set 'date' as date type
-            df["date"] = pd.to_datetime(df["date"]).dt.date
+            df = utils.load_csv(file_path)
 
             # Get ticker and cointegrated ticker from file name
             ticker, coint_ticker = self.get_tickers(file_path)
@@ -120,14 +147,21 @@ class CalProfitLoss:
             # Update completed trades for cointegrated ticker
             results_list.append(self.record_trades(df, ticker, coint_ticker))
 
-        # Combine all DataFrames and saved as csv file
-        df_results = pd.concat(results_list, axis=0)
-        df_results.to_csv(f"{self.results_dir}/trade_results.csv", index=False)
+        print(f"\nself.no_trades : {self.no_trades}\n")
 
-        # Compute summary
-        df_summary = self.gen_summary(df_results)
+        # Combine all DataFrames
+        df_results = pd.concat(results_list, axis=0).reset_index(drop=True)
 
-        return df_results
+        # Save combined DataFrame
+        utils.save_csv(
+            df_results, f"{self.results_dir}/trade_results.csv", save_index=False
+        )
+
+        # Generate overall and breakdown summary
+        df_summary = self.gen_overall_summary()
+        df_breakdown = self.gen_breakdown_summary()
+
+        return df_results, df_summary, df_breakdown
 
     def get_tickers(self, file_path: Path) -> list[str, str]:
         """Get stock ticker and its cointegrated stock tick from file path."""
@@ -141,7 +175,8 @@ class CalProfitLoss:
 
         Args:
             data (pd.DataFrame):
-                DataFrame containing price action generated from sentiment ratings.
+                DataFrame containing price action generated from sentiment
+                ratings for specific ticker.
             ticker (str):
                 Stock ticker whose news articles are sentiment rated.
             coint_ticker (str):
@@ -172,7 +207,7 @@ class CalProfitLoss:
                     coint_ticker=coint_ticker,
                     action=action,
                     entry_date=dt,
-                    entry_price=price,
+                    entry_price=Decimal(str(price)),
                 )
                 self.open_trades.append(stock_trade)
                 self.num_open += 1
@@ -189,7 +224,6 @@ class CalProfitLoss:
         if not completed_trades:
             self.no_trades.append(ticker)
 
-        # Convert to DataFrame
         return pd.DataFrame(completed_trades)
 
     def update_sell_info(self, dt: date, price: float) -> list[dict[str, Any]]:
@@ -211,7 +245,7 @@ class CalProfitLoss:
         for trade in self.open_trades:
             # Update StockTrade objects with exit info
             trade.exit_date = dt
-            trade.exit_price = price
+            trade.exit_price = Decimal(str(price))
 
             # Convert StockTrade to dictionary only if all fields are populated
             # i.e. trade completed.
@@ -231,7 +265,102 @@ class CalProfitLoss:
 
         return all(field is not None for field in stock_trade.model_dump().values())
 
-    def gen_summary(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Generate summary info given the compiled completed trades."""
+    def gen_overall_summary(self) -> pd.DataFrame:
+        """Generate summary info from 'trade_results.csv'."""
 
-        # List of stock tickers without
+        df = utils.load_csv(f"{self.results_dir}/trade_results.csv")
+
+        total_trades = len(df)
+        total_wins = df["win"].sum()
+        total_loss = total_trades - total_wins
+        first_entry_date = df["entry_date"].min()
+        last_entry_date = df["entry_date"].max()
+        last_exit_date = df["exit_date"].max()
+        trading_period = Decimal((last_exit_date - first_entry_date).days)
+        total_profit = df["profit_loss"].sum()
+        total_investment = df["entry_price"].sum()
+        percent_ret = (total_profit / total_investment).quantize(Decimal("1.000000"))
+        annual_ret = ((1 + percent_ret) ** (365 / trading_period) - 1).quantize(
+            Decimal("1.000000")
+        )
+
+        print(f"\ndf['ticker'].nunique() : {df['ticker'].nunique()}\n")
+
+        overall = {
+            "stock_ticker_without_trades": ", ".join(sorted(list(set(self.no_trades)))),
+            "stock_ticker_with_trades": ", ".join(df["ticker"].unique().tolist()),
+            "total_num_trades": total_trades,
+            "total_num_wins": total_wins,
+            "total_num_loss": total_loss,
+            "total_profit": total_profit,
+            "max_loss": df["profit_loss"].min(),
+            "max_profit": df["profit_loss"].max(),
+            "mean_profit": df["profit_loss"].mean(),
+            "median_profit": df["profit_loss"].median(),
+            "total_investment": total_investment,
+            "first_trade": first_entry_date,
+            "last_trade": last_entry_date,
+            "trading_period": trading_period,
+            "percent_return": percent_ret,
+            "annualized_return": annual_ret,
+        }
+
+        # Convert to DataFrame
+        df_overall = pd.DataFrame.from_dict(
+            overall, orient="index", columns=["Overall Statistics"]
+        )
+        utils.save_csv(
+            df_overall, f"{self.results_dir}/overall_summary.csv", save_index=True
+        )
+
+        print(f"df_overall : \n\n{df_overall}\n")
+
+        return df_overall
+
+    def gen_breakdown_summary(self) -> pd.DataFrame:
+        """Generate breakdown summary for each ticker-cointegrated ticker pair."""
+
+        df = utils.load_csv(f"{self.results_dir}/trade_results.csv")
+
+        # Compute aggregated values for each ticker-coint_ticker pair
+        df_summary = df.groupby(by=["ticker", "coint_ticker"]).agg(
+            {
+                "entry_date": ["min", "max"],
+                "exit_date": "max",
+                "days_held": ["min", "max", "mean", "median"],
+                "entry_price": "sum",
+                "profit_loss": ["min", "max", "mean", "median", "sum"],
+                "win": ["count", "sum"],
+            }
+        )
+
+        # Append 'trading_period' column
+        days_held = pd.to_datetime(df_summary[("exit_date", "max")]) - pd.to_datetime(
+            df_summary[("entry_date", "min")]
+        )
+        df_summary["trading_period"] = days_held.map(
+            lambda delta: Decimal(str(delta.days))
+        )
+
+        # Append 'percent_ret' column rounded to nearest 6 significant figures
+        percent_ret = (
+            df_summary[("profit_loss", "sum")] / df_summary[("entry_price", "sum")]
+        )
+        df_summary["percent_ret"] = percent_ret.map(
+            lambda num: num.quantize(Decimal("1.000000"))
+        )
+
+        # Append 'annualized_returns' column
+        annual_ret = (1 + df_summary["percent_ret"]) ** (
+            365 / df_summary["trading_period"]
+        )
+        df_summary["annual_ret"] = annual_ret.map(
+            lambda num: num.quantize(Decimal("1.000000"))
+        )
+
+        # Save as csv file
+        utils.save_csv(
+            df_summary, f"{self.results_dir}/breakdown_summary.csv", save_index=True
+        )
+
+        return df_summary
