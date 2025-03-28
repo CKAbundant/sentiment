@@ -94,8 +94,9 @@ class GenPriceAction:
         """Generate and save DataFrame including average sentiment rating and
         closing price of stock and co-integrated stock."""
 
-        # Load 'sentiment.csv'
+        # Load 'sentiment.csv' and 'coint_5y.csv'
         df_senti = pd.read_csv(self.senti_path)
+        df_coint = self.load_coint()
 
         for ticker in tqdm(df_senti["ticker"].unique()):
             # Filter specific ticker
@@ -115,7 +116,7 @@ class GenPriceAction:
             df_av = self.append_close(df_av, ticker)
 
             # Append closing price of top N co-integrated stocks with lowest pvalue
-            self.gen_topn_close(df_av, ticker)
+            self.gen_topn_close(df_av, df_coint, ticker)
 
     def load_coint(self) -> pd.DataFrame:
         """Load cointegration CSV file as DataFrame if available else generate
@@ -211,7 +212,9 @@ class GenPriceAction:
 
         return df
 
-    def gen_topn_close(self, data: pd.DataFrame, ticker: str) -> None:
+    def gen_topn_close(
+        self, data: pd.DataFrame, df_coint: pd.DataFrame, ticker: str
+    ) -> None:
         """Generate and save Dataframe for each 'top_n' cointegrated stocks with
         lowest pvalue.
 
@@ -219,6 +222,8 @@ class GenPriceAction:
             data (pd.DataFrame):
                 DataFrame containing average sentiment rating and closing price
                 for ticker.
+            df_coint (pd.DataFrame):
+                DataFrame containing cointegration info for stock ticker pairs.
             ticker (str):
                 Stock ticker whose news are sentiment-rated.
 
@@ -229,7 +234,7 @@ class GenPriceAction:
         df = data.copy()
 
         # Get list of cointegrated stocks with lowest pvalue
-        coint_list = self.get_topn_tickers(ticker)
+        coint_list = self.get_topn_tickers(ticker, df_coint)
 
         for coint_ticker in coint_list:
             # Generate and save DataFrame for each cointegrated stock
@@ -255,11 +260,18 @@ class GenPriceAction:
             return "sell"
         return "wait"
 
-    def get_topn_tickers(self, ticker: str) -> list[str]:
-        """Get list of top N stock with lowest pvalue for cointegration test with 'ticker'."""
+    def get_topn_tickers(self, ticker: str, df_coint: pd.DataFrame) -> list[str]:
+        """Get list of top N stock with lowest pvalue for cointegration test with 'ticker'.
 
-        # load cointegration CSV file if present
-        df_coint = self.load_coint()
+        Args:
+            ticker (str):
+                Stock ticker whose news are sentiment-rated.
+            df_coint (pd.DataFrame):
+                DataFrame containing cointegration info for stock ticker pairs.
+
+        Returns:
+            (list[str]): LIst of top N stocks with lowest cointegration pvalue.
+        """
 
         # Filter top N cointegrated stocks with lowest pvalue
         cond = ((df_coint["cointegrate"] == 1) & (df_coint["ticker1"] == ticker)) | (

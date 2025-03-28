@@ -28,6 +28,7 @@ from functools import partial
 import pandas as pd
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
+from tqdm import tqdm
 
 from src.sentiment import SentimentRater
 from src.utils import utils, yahoo_utils
@@ -140,8 +141,6 @@ class GenData:
         # for different rater. Save DataFrame as csv file
         df_combine = pd.concat(df_list, axis=0).reset_index(drop=True)
         df_combine.to_csv("./data/news.csv", index=False)
-
-        df_combine = pd.read_csv("./data/news.csv")
 
         # Append sentiment scores for various FinBERT models
         df_combine = self.append_sentiment_scores(df_combine)
@@ -341,7 +340,7 @@ class GenData:
 
         df = df_news.copy()
 
-        for model_name in self.model_list:
+        for model_name in tqdm(self.model_list):
             # Get column name for sentiment rating
             col_name = self.get_col_name(model_name)
 

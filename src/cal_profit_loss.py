@@ -334,6 +334,10 @@ class CalProfitLoss:
             }
         )
 
+        # 'mean' and 'median' operation generates float output
+        # Round to 6 decimal places and convert to decimal type
+        df_summary = utils.set_decimal_type(df_summary, to_round=True)
+
         # Append 'trading_period' column
         days_held = pd.to_datetime(df_summary[("exit_date", "max")]) - pd.to_datetime(
             df_summary[("entry_date", "min")]
@@ -351,10 +355,8 @@ class CalProfitLoss:
         )
 
         # Append 'annualized_returns' column
-        annual_ret = (1 + df_summary["percent_ret"]) ** (
-            365 / df_summary["trading_period"]
-        )
-        df_summary["annual_ret"] = annual_ret.map(
+        annual_ret = (1 + percent_ret) ** (365 / df_summary["trading_period"]) - 1
+        df_summary[("annual_ret", "")] = annual_ret.map(
             lambda num: num.quantize(Decimal("1.000000"))
         )
 

@@ -15,6 +15,7 @@ from requests import Session
 from requests_cache import CacheMixin, SQLiteCache
 from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
 from statsmodels.tsa.stattools import coint
+from tqdm import tqdm
 from yfinance.exceptions import YFPricesMissingError
 
 from src.utils import utils
@@ -162,6 +163,9 @@ class CoIntegrate:
 
         stock_list = stock_list or self.stock_list
 
+        # Create folder if not exist
+        utils.create_folder(self.stock_dir)
+
         # Reset self.unsuccessful
         self.unsuccessful = []
 
@@ -169,7 +173,11 @@ class CoIntegrate:
         if not self.session:
             self._init_session()
 
-        for idx, ticker in enumerate(stock_list):
+        for idx, ticker in tqdm(
+            enumerate(stock_list),
+            desc="Downloading from yfinance",
+            total=len(stock_list),
+        ):
             try:
                 file_path = f"{self.stock_dir}/{ticker}.parquet"
 
@@ -183,7 +191,6 @@ class CoIntegrate:
                 print(f"{idx+1:>5}) {ticker:<6} : {len(df)}\n")
 
                 # Save as parquet file
-                utils.create_folder(self.stock_dir)
                 df.to_parquet(file_path, index=True)
 
             except YFPricesMissingError as e:

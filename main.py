@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from pprint import pformat
 
 import pandas as pd
 
@@ -26,7 +27,7 @@ def main() -> None:
 
     # Generate price action of top 10 stocks with lowest cointegration pvalue
     # with selected stocks
-    gen_pa = GenPriceAction(date="2025-03-26")
+    gen_pa = GenPriceAction()
     gen_pa.run()
 
     results_dir = f"./data/results/{gen_pa.date}"
@@ -35,11 +36,11 @@ def main() -> None:
         print(f"{idx+1:>3}) {fpath}")
 
     # Compile profit and loss
-    cal_pl = CalProfitLoss(date="2025-03-26")
+    cal_pl = CalProfitLoss()
     df_results, df_overall, df_breakdown = cal_pl.run()
     print(f"df_results : \n\n{df_results}\n")
     print(f"df_overall : \n\n{df_overall}\n")
-    print(f"df_breakdown : \n\n{df_breakdown}\n")
+    print(f"df_breakdown : \n\n{pformat(df_breakdown)}\n")
 
 
 if __name__ == "__main__":
