@@ -42,14 +42,15 @@ class GenPriceAction:
 
     Args:
         date (str):
-            If provided, date when cointegration is performed.
+            If provided, date when news are scraped.
         senti_path (str):
             Relative path to CSV file containing news sentiment rating
             (Default: "./data/sentiment.csv").
         stock_dir (str):
             Relative path to 'stock' folder (Default: "./data/stock").
         results_dir (str):
-            Relative path to 'results' folder (Default: "./data/results").
+            Relative path of folder containing price action for ticker pairs (i.e.
+            stock ticker and its cointegrated ticker) (Default: "./data/results").
         model_name (str):
             Name of FinBERT model in Huggi[ngFace (Default: "ziweichen").
         top_n (int):
@@ -57,7 +58,7 @@ class GenPriceAction:
 
     Attributes:
         date (str):
-            If provided, date when cointegration is performed.
+            If provided, date when news are scraped.
         coint_path (str):
             If provided, relative path to CSV cointegration information (Default: None).
         senti_path (str):
@@ -66,7 +67,8 @@ class GenPriceAction:
         stock_dir (str):
             Relative path to stock folder (Default: "./data/stock").
         results_dir (str):
-            Relative path to 'results' folder (Default: "./data/results").
+            Relative path of folder containing price action for ticker pairs (i.e.
+            stock ticker and its cointegrated ticker) (Default: "./data/results").
         model_name (str):
             Name of FinBERT model in HuggingFace (Default: "ziweichen").
         top_n (int):
@@ -93,6 +95,10 @@ class GenPriceAction:
     def run(self) -> None:
         """Generate and save DataFrame including average sentiment rating and
         closing price of stock and co-integrated stock."""
+
+        # Create 'results' and 'reports' folder if not exist
+        if not Path(self.reports_dir).is_dir():
+            utils.create_folder(self.reports_dir)
 
         # Load 'sentiment.csv' and 'coint_5y.csv'
         df_senti = pd.read_csv(self.senti_path)
@@ -248,8 +254,10 @@ class GenPriceAction:
             subfolder = f"{self.results_dir}/{self.date}"
             utils.create_folder(subfolder)
 
-            file_path = f"{subfolder}/{ticker}_{coint_ticker}.csv"
+            file_name = f"{ticker}_{coint_ticker}.csv"
+            file_path = f"{subfolder}/{file_name}"
             utils.save_csv(df_coint_ticker, file_path, save_index=True)
+            print(f"Saved '{file_name}' at '{file_path}'")
 
     def gen_price_action(self, rating: int) -> str:
         """Return 'buy' if rating > 4, 'sell' if rating <= 2  else 'wait'."""

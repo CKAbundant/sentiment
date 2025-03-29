@@ -1,7 +1,7 @@
 """Generic helper functions"""
 
 import random
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -164,6 +164,10 @@ def remove_unnamed_cols(data: pd.DataFrame) -> pd.DataFrame:
     df = data.copy()
     formatted_cols = []
 
+    if any([isinstance(col, str) for col in df.columns]):
+        # No amendments made since columns are not multi-level
+        return df
+
     for col_tuple in df.columns:
         col_levels = []
         for col in col_tuple:
@@ -276,3 +280,38 @@ def display_divergent_rating(
     return df_divergent.style.set_properties(
         subset=["title", "content"], **{"width": "500px", "white-space": "normal"}
     )
+
+
+def analyse_coint(
+    ticker: str,
+    coint_dir: str = "./data/coint",
+    top_n: int = 10,
+    periods: list[int] = [1, 3, 5],
+) -> tuple[dict[str, pd.DataFrame], dict[str, list[str]]]:
+    """Analyse cointegration data specific to 'ticker' in 'coint_dir'; and return
+    dictionaries mapping dates to DataFrame and list of cointegration tickers.
+
+    Args:
+        coint_dir (str):
+            Relative path to folder containing cointegration csv files
+            (Default: "./data/coint).
+        top_n (int):
+            Top N cointegrated tickers with lowest pvalue (Default: 10).
+        periods (list[int]):
+            List of periods used to compute cointegration (Default: [1, 5, 10]).
+
+    Returns:
+        df_dict (dict[str, pd.DataFrame]):
+            Dictionary mapping date to DataFrame containing cointegrated tickers
+            (pvalues < 0.05) with 'ticker'.
+        coint_dict (dict[str, list[str]]):
+            Dictionary mapping date to list containing top N cointegrated tickers.
+    """
+
+    df_dict = defaultdict(dict)
+    coint_dict = defaultdict(dict)
+
+    # Iterate through the cointegration csv files in 'coint_dir'
+    for file_path in Path(coint_dir).rglob("*.csv"):
+        # Get subfolder in 'coint_dir'
+        date = file_path.parent.name

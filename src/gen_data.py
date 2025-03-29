@@ -24,6 +24,7 @@ info. Reason being Scrapling is not able to perform scrolling.
 import re
 import time
 from functools import partial
+from pathlib import Path
 
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -46,6 +47,8 @@ class GenData:
         >>> result_df = poc.run()
 
     Args:
+        date (str):
+            If provided, date when news are scraped.
         base_url (str):
             URL to Yahoo Finance to specifics stock news by replacing 'ticker' with
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news").
@@ -59,8 +62,13 @@ class GenData:
             List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
             "yiyanghkust/finbert-tone", "ZiweiChen/FinBERT-FOMC",
             "AventIQ-AI/finbert-sentiment-analysis"]).
+        results_dir (str):
+            Relative path of folder containing price action for ticker pairs (i.e.
+            stock ticker and its cointegrated ticker) (Default: "./data/results").
 
     Attributes:
+        date (str):
+            If provided, date when news are scraped.
         base_url (str):
             URL to Yahoo Finance to specifics stock news by replacing 'ticker' with
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news).
@@ -74,10 +82,14 @@ class GenData:
             List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
             "yiyanghkust/finbert-tone", "ZiweiChen/FinBERT-FOMC",
             "AventIQ-AI/finbert-sentiment-analysis"]).
+        results_dir (str):
+            Relative path of folder containing price action for ticker pairs (i.e.
+            stock ticker and its cointegrated ticker) (Default: "./data/results").
     """
 
     def __init__(
         self,
+        date: str | None = None,
         base_url: str = "https://finance.yahoo.com/quote/{ticker}/news",
         stock_list: list[str] = [
             "AAPL",
@@ -107,17 +119,24 @@ class GenData:
             "ZiweiChen/FinBERT-FOMC",  # FOMC reports
             "AventIQ-AI/finbert-sentiment-analysis",  # General English quotes
         ],
+        results_dir: str = "./data/results",
     ):
+        self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.base_url = base_url
         self.stock_list = stock_list
         self.max_scrolls = max_scrolls
         self.model_list = model_list
+        self.results_dir = results_dir
 
     def run(self) -> pd.DataFrame:
         """Generate DataFrame containing news extracted from Yahoo Finance; and
         generate sentiment score."""
 
         df_list = []
+
+        # Create 'results' folder if not exist
+        if not Path(self.results_dir).is_dir():
+            utils.create_folder(self.results_dir)
 
         for ticker in self.stock_list:
             print(f"\nticker : {ticker}")
