@@ -1,0 +1,254 @@
+"""Class to perform cointegration for S&P 500 stocks"""
+
+import csv
+import time
+from itertools import combinations
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import networkx as nx
+import pandas as pd
+from matplotlib.figure import Figure
+from scipy import stats
+from statsmodels.tsa.stattools import coint
+from tqdm import tqdm
+
+from src.utils import utils
+
+
+class CalCointCorr:
+    """Calculate correlation and cointegration between all ticker pairs
+    combination in S&P500 stocks.
+
+    - Correlation (Pearson, Spearman and Kendall)
+    - Cointegration (Engle-Granger)
+
+    Usage:
+        # Use default setting i.e. date = <current date>
+        >>> get_rel = GetRel()
+        >>> get_rel.run()
+
+    Args:
+        date (str):
+            If provided, date when news are scraped.
+        periods (list[int]):
+            list of time periods to compute correlation and cointegration
+            (Default: [1, 3, 5]).
+        stock_dir (str):
+            Relative path to folder containing stocks OHLCV data
+            (Default: "./data/stock").
+        coint_corr_dir (str):
+            Relative path to folder containing cointegration and correlation information
+            (Default: "./data/coint_corr").
+        corr_models (list[str]):
+            List of correlation models (Default: ["pearsonr", "spearmanr", "kendalltau"]).
+
+    Attributes
+        date (str):
+            If provided, date when news are scraped.
+        periods (list[int]):
+            list of time periods to compute correlation and cointegration
+            (Default: [1, 3, 5]).
+        stock_dir (str):
+            Relative path to folder containing stocks OHLCV data
+            (Default: "./data/stock").
+        coint_corr_dir (str):
+            Relative path to folder containing cointegration and correlation information
+            (Default: "./data/coint_corr").
+        coint_corr_date_dir (str):
+            Relative path to subfolder under 'coint_corr_dir'.
+        corr_models (list[str]):
+            List of correlation models (Default: ["pearsonr", "spearmanr", "kendalltau"]).
+    """
+
+    def __init__(
+        self,
+        date: str | None = None,
+        periods: list[int] = [1, 3, 5],
+        stock_dir: str = "./data/stock",
+        coint_corr_dir: str = "./data/coint_corr",
+        corr_models: list[str] = ["pearsonr", "spearmanr", "kendalltau"],
+    ) -> None:
+        self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
+        self.periods = periods
+        self.stock_dir = stock_dir
+        self.coint_corr_dir = coint_corr_dir
+        self.coint_corr_date_dir = f"{coint_corr_dir}/{self.date}"
+        self.corr_models = corr_models
+
+    def run(self) -> None:
+        """Generate DataFrame containing correlation and cointegration between
+        all pair combinations of S&P500 stocks."""
+
+        # Perform correlation and cointegration analysis for 5, 3 and 1 year
+        for num_years in self.periods:
+            self.gen_coint_corr_df(num_years)
+
+    def gen_coint_corr_df(self, num_years: int, coint_corr_path: str) -> None:
+        """Generate DataFrame containing cointegration and/or correlation
+        between closing price of ticker pairs.
+
+        Args:
+            num_years (int):
+                Number of years required to compute cointegration.
+            coint_corr_path (str):
+                Relative path to save csv file containing cointegration and
+                correlation info.
+
+        Returns:
+            None.
+        """
+
+        # If file exist, skip cointegration and correlation computation
+        coint_corr_path = f"{self.coint_corr_date_dir}/coint_corr_{num_years}y.csv"
+        if Path(coint_corr_path).is_file():
+            print(f"'{coint_corr_path}' exist. No further computation required.")
+            return
+
+        # Get list of tickers with enough data for cointegration computation
+        updated_list = self.get_enough_period(num_years)
+
+        # Ensure subfolder exist
+        utils.create_folder(self.coint_corr_date_dir)
+
+        records = []
+
+        for ticker1, ticker2 in combinations(updated_list, 2):
+            print(f"{ticker1}-{ticker2} [num_years : {num_years}]")
+
+            try:
+                # Get equal length 'Close' price for both tickers
+                df_close = self.gen_timeseries(ticker1, ticker2, num_years)
+
+                # Compute various correlation and cointegration values
+                results_dict = self.cal_coint_corr(df_close, ticker1, ticker2)
+                records.append(results_dict)
+
+            except Exception as e:
+                print(f"Error encountered for {ticker1}-{ticker2} : {e}")
+
+        # Convert to DataFrame; and save as csv file
+        df_coint_corr = pd.DataFrame(records)
+        df_coint_corr.to_csv(coint_corr_path, index=False)
+
+    def cal_coint_corr(
+        self, df_close: pd.DataFrame, ticker1: str, ticker2
+    ) -> dict[str, float]:
+        """Compute various cointegration and correlation between ticker1 and ticker2.
+
+        Args:
+            df_close (pd.DataFrame):
+                DataFrame containing closing price of ticker1 and ticker2.
+            ticker1 (str):
+                Stock ticker whose news are sentiment-rated.
+            ticker2 (str):
+                Cointegrated stock ticker to 'ticker1'.
+
+        Returns:
+            record (dict[str, float]):
+                Dictionary containing cointegration and correlation values
+                for ticker pair.
+        """
+
+        # Compute cointegration values based on Engle-Granger test
+        _, coint_pvalue, _ = coint(df_close[ticker1], df_close[ticker2])
+
+        # Create dictionary to store cointegration and correlation results
+        record = {
+            "ticker1": ticker1,
+            "ticker2": ticker2,
+            "coint": coint_pvalue,
+        }
+
+        for corr_model in self.corr_models:
+            if not hasattr(stats, corr_model):
+                raise ModuleNotFoundError(f"{corr_model} is an invalid Scipy model.")
+
+            # Compute correlation and update 'record' dictionary
+            corr_fn = getattr(stats, corr_model)
+            corr_results = corr_fn(df_close[ticker1], df_close[ticker2])
+            record[corr_model] = corr_results.statistic
+
+        return record
+
+    def get_enough_period(self, num_years: int) -> list[str]:
+        """Identify list of tickers that have enough data for 'num_years'
+        number of years.
+
+        Args:
+            num_years (int): Number of years required to compute cointegration.
+
+        Returns:
+            (list[str]): List of tickers with enough data points.
+        """
+
+        return [
+            ticker for ticker in self.stock_list if self.is_enough(ticker, num_years)
+        ]
+
+    def gen_timeseries(
+        self, ticker1: str, ticker2: str, num_years: int
+    ) -> pd.DataFrame | None:
+        """Generate equal length timeseries of Pandas Series Type based on given
+        tickers and number of years.
+
+        Args:
+            ticker1 (str): First stock ticker.
+            ticker2 (str): Second stock ticker.
+            num_years (int): Number of years required to compute cointegration.
+
+        Returns:
+            df (pd.DataFrame): DataFrame containing closing price for both tickers.
+        """
+
+        # Load DataFrame for both tickers
+        df1 = pd.read_parquet(f"{self.stock_dir}/{ticker1}.parquet")
+        df2 = pd.read_parquet(f"{self.stock_dir}/{ticker2}.parquet")
+
+        # Filter DataFrame to contain past 'num_years' years of records
+        df1 = self.filter_df(df1, num_years)
+        df2 = self.filter_df(df2, num_years)
+
+        # Ensure timeseries for both tickers are of equal length by concatenating
+        # "Close" Pandas Series and removing null values
+        df = pd.concat([df1["Close"], df2["Close"]], axis=1)
+        df.columns = [ticker1, ticker2]
+        df = df.dropna()
+
+        return df
+
+    def filter_df(self, df: pd.DataFrame, num_years: int) -> pd.DataFrame:
+        """Filter DataFrame to contain past 'num_years' years of records."""
+
+        # Get the earliest date based on 'num_years' period
+        req_earliest = self.cal_req_earliest(df, num_years)
+
+        return df.loc[df.index >= req_earliest, :].reset_index(drop=True)
+
+    def cal_req_earliest(self, df: pd.DataFrame, num_years: int) -> pd.Timestamp:
+        """Calculate earliest date for past 'num_years' records in DataFrame."""
+
+        # latest date in DataFrame
+        latest_date = df.index.max()
+
+        return latest_date - pd.DateOffset(years=num_years)
+
+    def is_enough(self, ticker: str, num_years: int) -> bool:
+        """Check whether there is enough data for cointegration computation.
+
+        Args:
+            ticker (str): Stock ticker
+            num_years (int): Number of years required to compute cointegration.
+
+        Returns:
+            (bool): True if there is enough data.
+        """
+
+        # Load DataFrame from parquet file
+        df = pd.read_parquet(f"{self.stock_dir}/{ticker}.parquet")
+
+        # Compute required earliest date
+        earliest = df.index.min()
+        req_earliest = self.cal_req_earliest(df, num_years)
+
+        return earliest <= req_earliest

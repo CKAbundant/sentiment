@@ -23,75 +23,91 @@ only the closing price of co-integrated stock.
 """
 
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import pandas as pd
 import pandas_market_calendars as mcal
 from tqdm import tqdm
 
-from src.get_rel import GetRel
+from src.cal_coint_corr import CalCointCorr
 from src.utils import utils
+
+HF_MODEL = Literal["prosusai", "yiyanghkust", "ziweichen", "aventiq_ai"]
+COINT_CORR_FN = Literal["coint", "pearsonr", "spearmanr", "kendalltau"]
 
 
 class GenPriceAction:
-    """Generate sentiment rating, closing price and price action for each day.
+    """Generate sentiment rating, closing price and price action for
+    specific date, model, period, and correlation/cointegration combination.
 
     Usage:
-        >>> gen_price_action = GenPriceAction("AAPL")
+        >>> gen_price_action = GenPriceAction()
         >>> df = gen_price_action.run()
 
     Args:
         date (str):
             If provided, date when news are scraped.
+        hf_model (HF_MODEL):
+            Name of FinBERT model in Huggi[ngFace (Default: "ziweichen").
+        coint_corr_fn (COINT_CORR_FN):
+            Name of function to perform either cointegration or correlation.
+        period (int):
+            Time period used to compute cointegration (Default: 5).
+        top_n (int):
+            Top N number of stocks with lowest pvalue.
         stock_dir (str):
             Relative path to 'stock' folder (Default: "./data/stock").
         results_dir (str):
             Relative path of folder containing price action for ticker pairs (i.e.
             stock ticker and its cointegrated ticker) (Default: "./data/results").
-        model_name (str):
-            Name of FinBERT model in Huggi[ngFace (Default: "ziweichen").
-        period (int):
-            Time period used to compute cointegration (Default: 5).
-        top_n (int):
-            Top N number of stocks with lowest pvalue.
 
     Attributes:
         date (str):
             If provided, date when news are scraped.
-        coint_path (str):
+        hf_model (str):
+            Name of FinBERT model in HuggingFace (Default: "ziweichen").
+        coint_corr_fn (COINT_CORR_FN):
+            Name of function to perform either cointegration or correlation
+            (Default: "coint").
+        top_n (int):
+            Top N number of stocks with lowest pvalue.
+        stock_dir (str):
+            Relative path to stock folder (Default: "./data/stock").
+        coint_corr_path (str):
             If provided, relative path to CSV cointegration information (Default: None).
         senti_path (str):
             Relative path to CSV file containing news sentiment rating
             (Default: "./data/sentiment.csv").
-        stock_dir (str):
-            Relative path to stock folder (Default: "./data/stock").
-        model_name (str):
-            Name of FinBERT model in HuggingFace (Default: "ziweichen").
         price_action_dir (str):
             Relative path of folder containing price action of ticker pairs for specific
             model and cointegration period.
-        top_n (int):
-            Top N number of stocks with lowest pvalue.
     """
 
     def __init__(
         self,
         date: str | None = None,
-        stock_dir: str = "./data/stock",
-        results_dir: str = "./data/results",
-        model_name: str = "ziweichen",
+        hf_model: HF_MODEL = "ziweichen",
+        coint_corr_fn: COINT_CORR_FN = "coint",
         period: int = 5,
         top_n: int = 10,
+        stock_dir: str = "./data/stock",
+        results_dir: str = "./data/results",
     ) -> None:
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
-        self.coint_path = f"./data/coint/{self.date}/coint_{period}y.csv"
-        self.senti_path = f"./data/results/{self.date}/sentiment.csv"
-        self.stock_dir = stock_dir
-        self.model_name = model_name
-        self.price_action_dir = (
-            f"{results_dir}/{self.date}/{model_name}_{period}/price_actions"
-        )
+        self.hf_model = hf_model
+        self.coint_corr_fn = coint_corr_fn
         self.top_n = top_n
+        self.stock_dir = stock_dir
+
+        coint_corr_dir = f"./data/coint_corr/{self.date}"
+        results_date_dir = f"{results_dir}/{self.date}"
+
+        self.coint_corr_path = f"{coint_corr_dir}/coint_corr_{period}y.csv"
+        self.senti_path = f"{results_date_dir}/sentiment.csv"
+        self.price_action_dir = (
+            f"{results_date_dir}/{hf_model}_{coint_corr_fn}_{period}/price_actions"
+        )
 
     def run(self) -> None:
         """Generate and save DataFrame including average sentiment rating and
@@ -99,7 +115,7 @@ class GenPriceAction:
 
         # Load 'sentiment.csv' and 'coint_5y.csv'
         df_senti = pd.read_csv(self.senti_path)
-        df_coint = self.load_coint()
+        df_coint_corr = self.load_coint_corr()
 
         for ticker in tqdm(df_senti["ticker"].unique()):
             # Filter specific ticker
@@ -119,24 +135,28 @@ class GenPriceAction:
             df_av = self.append_close(df_av, ticker)
 
             # Append closing price of top N co-integrated stocks with lowest pvalue
-            self.gen_topn_close(df_av, df_coint, ticker)
+            self.gen_topn_close(df_av, df_coint_corr, ticker)
 
-    def load_coint(self) -> pd.DataFrame:
-        """Load cointegration CSV file as DataFrame if available else generate
-        cointegration csv file"""
+    def load_coint_corr(self) -> pd.DataFrame:
+        """Load csv file containing cointegration and correlation info."""
 
-        if Path(self.coint_path).is_file():
-            return pd.read_csv(self.coint_path)
+        csv_path = Path(self.coint_corr_path)
 
-        # Generate cointegration file
-        cointegrate = CoIntegrate()
-        return cointegrate.run()
+        if not csv_path.is_file():
+            print(
+                f"'{csv_path.name}' is not available at '{csv_path}'. "
+                f"Proceed to generate '{csv_path.name}'..."
+            )
+            cal_coint_corr = CalCointCorr(date=self.date)
+            cal_coint_corr.run()
 
-    def cal_mean_sentiment(self, data: pd.DataFrame) -> pd.DataFrame:
+        return pd.read_csv(self.coint_corr_path)
+
+    def cal_mean_sentiment(self, df_ticker: pd.DataFrame) -> pd.DataFrame:
         """Compute the average sentiment and average sentiment (excluding rating 3)
         for each trading day"""
 
-        df = data.copy()
+        df = df_ticker.copy()
 
         # Generate 'date' column from 'pub_date' by extracting out the date
         # i.e. exclude time component
@@ -144,11 +164,11 @@ class GenPriceAction:
         df["date"] = df["pub_date"].dt.date
 
         # Exclude news with rating 3
-        df_exclude = df.loc[df[self.model_name] != 3, :]
+        df_exclude = df.loc[df[self.hf_model] != 3, :]
 
         # Get Pandas Series of mean ratings (with and without rating 3)
-        series_incl = df.groupby(by=["date"])[self.model_name].mean()
-        series_excl = df_exclude.groupby(by=["date"])[self.model_name].median()
+        series_incl = df.groupby(by=["date"])[self.hf_model].mean()
+        series_excl = df_exclude.groupby(by=["date"])[self.hf_model].median()
 
         # Generate DataFrame by concatenating 'series_incl' and 'series_excl'
         df_av = pd.concat([series_incl, series_excl], axis=1)
@@ -199,10 +219,10 @@ class GenPriceAction:
 
         return df
 
-    def append_close(self, data: pd.DataFrame, ticker: str) -> pd.DataFrame:
+    def append_close(self, df_av: pd.DataFrame, ticker: str) -> pd.DataFrame:
         """Append closing price of stock ticker whose news are sentiment-rated."""
 
-        df = data.copy()
+        df = df_av.copy()
 
         # Load OHLCV prices for ticker
         ohlcv_path = f"{self.stock_dir}/{ticker}.parquet"
@@ -210,23 +230,32 @@ class GenPriceAction:
         df_ohlcv.index = pd.to_datetime(df_ohlcv.index)
         df.index = pd.to_datetime(df.index)
 
+        if df.index.max() > df_ohlcv.index.max():
+            raise ValueError(
+                f"OHLCV data is only available up to {df_ohlcv.index.max()}"
+            )
+
         # Append closing price of 'ticker'
         df[f"{ticker}_close"] = df_ohlcv.loc[df_ohlcv.index.isin(df.index), "Close"]
 
         return df
 
     def gen_topn_close(
-        self, df_av: pd.DataFrame, df_coint: pd.DataFrame, ticker: str
+        self,
+        df_av: pd.DataFrame,
+        df_coint_corr: pd.DataFrame,
+        ticker: str,
     ) -> None:
         """Generate and save Dataframe for each 'top_n' cointegrated stocks with
         lowest pvalue.
 
         Args:
-            data (pd.DataFrame):
+            df_av (pd.DataFrame):
                 DataFrame containing average sentiment rating and closing price
                 for ticker.
-            df_coint (pd.DataFrame):
-                DataFrame containing cointegration info for stock ticker pairs.
+            df_coint_corr (pd.DataFrame):
+                DataFrame containing cointegration and correlation info for
+                stock ticker pairs.
             ticker (str):
                 Stock ticker whose news are sentiment-rated.
 
@@ -237,23 +266,29 @@ class GenPriceAction:
         df = df_av.copy()
 
         # Get list of cointegrated stocks with lowest pvalue
-        coint_list = self.get_topn_tickers(ticker, df_coint)
+        coint_list = self.get_topn_tickers(ticker, df_coint_corr)
+
+        if coint_list is None:
+            return
 
         for coint_ticker in coint_list:
             # Generate and save DataFrame for each cointegrated stock
-            df_coint_ticker = self.append_coint_close(df, coint_ticker=coint_ticker)
+            df_coint_corr_ticker = self.append_coint_close(
+                df, coint_ticker=coint_ticker
+            )
 
             # Append price-action i.e. buy if rating is >=4; sell if rating is <=2
-            df_coint_ticker["action"] = df_coint_ticker["median_rating_excl"].map(
-                self.gen_price_action
-            )
+            df_coint_corr_ticker["action"] = df_coint_corr_ticker[
+                "median_rating_excl"
+            ].map(self.gen_price_action)
 
             # Create folder if not exist
             utils.create_folder(self.price_action_dir)
 
+            # Ensure precision is maintained using Decimal object
             file_name = f"{ticker}_{coint_ticker}.csv"
             file_path = f"{self.price_action_dir}/{file_name}"
-            utils.save_csv(df_coint_ticker, file_path, save_index=True)
+            utils.save_csv(df_coint_corr_ticker, file_path, save_index=True)
             print(f"Saved '{file_name}' at '{file_path}'")
 
     def gen_price_action(self, rating: int) -> str:
@@ -265,27 +300,49 @@ class GenPriceAction:
             return "sell"
         return "wait"
 
-    def get_topn_tickers(self, ticker: str, df_coint: pd.DataFrame) -> list[str]:
+    def get_topn_tickers(
+        self, ticker: str, df_coint_corr: pd.DataFrame
+    ) -> list[str] | None:
         """Get list of top N stock with lowest pvalue for cointegration test with 'ticker'.
 
         Args:
             ticker (str):
                 Stock ticker whose news are sentiment-rated.
-            df_coint (pd.DataFrame):
-                DataFrame containing cointegration info for stock ticker pairs.
+            df_coint_corr (pd.DataFrame):
+                DataFrame containing cointegration and correlation info for
+                stock ticker pairs.
 
         Returns:
-            (list[str]): LIst of top N stocks with lowest cointegration pvalue.
+            (list[str]) | None:
+                List of top N stocks with lowest cointegration pvalue or highest
+                correlation if available.
         """
 
-        # Filter top N cointegrated stocks with lowest pvalue
-        cond = ((df_coint["cointegrate"] == 1) & (df_coint["ticker1"] == ticker)) | (
-            (df_coint["cointegrate"] == 1) & (df_coint["ticker2"] == ticker)
+        # Filter records containing 'ticker' in 'ticker1' or 'ticker2' columns
+        cond = (df_coint_corr["ticker1"] == ticker) | (
+            df_coint_corr["ticker2"] == ticker
         )
-        df_topn = (
-            df_coint.loc[cond, :]
-            .sort_values(by=["pvalue"], ascending=True)
-            .head(self.top_n)
+        df = df_coint_corr.loc[cond, :].copy()
+
+        if self.coint_corr_fn == "coint":
+            # Ensure cointegration pvalue is less than 0.05
+            df = df.loc[df[self.coint_corr_fn] < 0.05, :]
+            sort_order = True
+
+        else:
+            # Ensure correlation is at more than 0.5
+            df = df.loc[df[self.coint_corr_fn] > 0.5, :]
+            sort_order = False
+
+        if df.empty:
+            print(
+                f"Records doesn't meet minimum requirement for '{self.coint_corr_fn}' method."
+            )
+            return None
+
+        # Get top N stocks based on 'self.coint_corr_fn'
+        df_topn = df.sort_values(by=self.coint_corr_fn, ascending=sort_order).head(
+            self.top_n
         )
 
         # Get set of unique tickers from 'ticker1' and 'ticker2' columns
@@ -296,10 +353,12 @@ class GenPriceAction:
         # Convert set to sorted list excluding 'ticker'
         return [symb for symb in sorted(list(coint_set)) if symb != ticker]
 
-    def append_coint_close(self, data: pd.DataFrame, coint_ticker: str) -> pd.DataFrame:
+    def append_coint_close(
+        self, df_av: pd.DataFrame, coint_ticker: str
+    ) -> pd.DataFrame:
         """Append closing price of cointegrated stocks."""
 
-        df = data.copy()
+        df = df_av.copy()
 
         # Load OHLCV prices for ticker
         ohlcv_path = f"{self.stock_dir}/{coint_ticker}.parquet"
@@ -308,6 +367,11 @@ class GenPriceAction:
         # Ensure both df.index and df_ohlcv are datetime objects
         df.index = pd.to_datetime(df.index)
         df_ohlcv.index = pd.to_datetime(df_ohlcv.index)
+
+        if df.index.max() > df_ohlcv.index.max():
+            raise ValueError(
+                f"OHLCV data is only available up to {df_ohlcv.index.max()}"
+            )
 
         # Append closing price of 'ticker'
         df[f"{coint_ticker}_close"] = df_ohlcv.loc[

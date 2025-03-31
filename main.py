@@ -12,6 +12,7 @@ repo_dir = Path(__file__).parent.as_posix()
 if repo_dir not in sys.path:
     sys.path.append(repo_dir)
 
+from src.cal_coint_corr import CalCointCorr
 from src.cal_profit_loss import CalProfitLoss
 from src.download_ohlcv import DownloadOHLCV
 from src.gen_data import GenData
@@ -38,8 +39,12 @@ def main() -> None:
     download_ohlcv = DownloadOHLCV(end_date=date)
     download_ohlcv.run()
 
-    # Generate price action of top 10 stocks with lowest cointegration pvalue
-    # with selected stocks
+    # Perform cointegration and correlation analysis and save results as csv file
+    cal_coint_corr = CalCointCorr()
+    cal_coint_corr.run()
+
+    # Test out different strategies
+    # Generate price action of top 10 cointegrated/correlated stocks
     gen_pa = GenPriceAction(date=date)
     gen_pa.run()
 
@@ -50,8 +55,6 @@ def main() -> None:
     # print(f"df_overall : \n\n{pformat(df_overall)}\n")
     # print(f"df_breakdown : \n\n{pformat(df_breakdown)}\n")
     # print(f"df_top_ret_pairs : \n\n{pformat(df_top_ret_pairs)}\n")
-
-    # Test out different strategies
 
 
 def parse_arguments() -> Namespace:
