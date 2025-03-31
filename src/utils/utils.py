@@ -1,7 +1,7 @@
 """Generic helper functions"""
 
 import random
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -150,18 +150,63 @@ def load_csv(
     df = set_decimal_type(df)
     df = set_date_type(df)
 
+    if isinstance(header, list):
+        # Remove 'Unnamed' from multi-level columns
+        return remove_unnamed_cols(df)
+
     return df
 
 
-def set_decimal_type(data: pd.DataFrame) -> pd.DataFrame:
-    """Ensure all numeric types in DataFrame are Decimal type."""
+def remove_unnamed_cols(data: pd.DataFrame) -> pd.DataFrame:
+    """Set column label containing 'Unnamed:' to empty string for multi-level
+    columns DataFrame."""
 
     df = data.copy()
-    num_cols = df.select_dtypes(include=np.number).columns.to_list()
+    formatted_cols = []
+
+    if any([isinstance(col, str) for col in df.columns]):
+        # No amendments made since columns are not multi-level
+        return df
+
+    for col_tuple in df.columns:
+        col_levels = []
+        for col in col_tuple:
+            if "unnamed:" in col.lower():
+                col_levels.append("")
+            else:
+                col_levels.append(col)
+        formatted_cols.append(col_levels)
+
+    df.columns = pd.MultiIndex.from_tuples(formatted_cols)
+
+    return df
+
+
+def set_decimal_type(data: pd.DataFrame, to_round: bool = False) -> pd.DataFrame:
+    """Ensure all numeric types in DataFrame are Decimal type.
+
+    Args:
+        DataFrame (pd.DataFrame):
+            Both normal and multi-level columns DataFrame.
+        to_round (bool):
+            Whether to round float to 6 decimal places before converting to
+            Decimal (Default: False).
+
+    Returns:
+        df (pd.DataFrame): DataFrame containing numbers of Decimal type only.
+    """
+
+    df = data.copy()
 
     # Convert numbers to Decimal type
-    for col in num_cols:
-        df[col] = df[col].map(lambda num: Decimal(str(num)))
+    for col in df.columns:
+        # Check if any item in Panda Series is float type
+        if any([isinstance(item, float) for item in df[col].to_list()]):
+            df[col] = df[col].map(
+                lambda num: (
+                    Decimal(str(round(num, 6))) if to_round else Decimal(str(num))
+                )
+            )
 
     return df
 
@@ -170,10 +215,68 @@ def set_date_type(data: pd.DataFrame) -> pd.DataFrame:
     """Ensure all datetime objects in DataFrame are set to datetime.date type."""
 
     df = data.copy()
-    date_cols = [col for col in df.columns if "date" in col.lower()]
+
+    # Check if 'date' is found in column for nomral and multi-level DataFrame
+    date_cols = [
+        col
+        for col in df.columns
+        if (isinstance(col, str) and "date" in col.lower())
+        or (isinstance(col, tuple) and "date" in col[0].lower())
+    ]
 
     # Convert date to datetime.date type
     for col in date_cols:
         df[col] = pd.to_datetime(df[col]).dt.date
 
     return df
+
+
+def display_divergent_rating(
+    df: pd.DataFrame,
+    cols: list[str] = [
+        "pub_date",
+        "ticker",
+        "publisher",
+        "period",
+        "title",
+        "content",
+        "prosusai",
+        "yiyanghkust",
+        "ziweichen",
+        "aventiq_ai",
+    ],
+    models: list[str] = ["prosusai", "yiyanghkust", "ziweichen", "aventiq_ai"],
+) -> pd.DataFrame:
+    """Display diver
+
+    Args:
+        data (pd.DataFrame):
+            DataFrame containing sentiment rating of news.
+        cols (list[str]):
+            List of columns to be displayed (Defaults: ["pub_date", "ticker",
+            "publisher", "period", "title", "content", "prosusai", "yiyanghkust",
+            "ziweichen", "aventiq_ai"]).
+        models (list[str]):
+            List of models for comparision (Default: ["prosusai", "yiyanghkust",
+            "ziweichen", "aventiq_ai"].
+
+    Returns:
+        df_divergent (pd.DataFrame):
+            Formatted DataFrame (words wrapped inside cell) to be displayed in Jupyter notebook.
+    """
+
+    # Create 'temp' DataFrame to contain only sentiment ratings for selected models
+    temp = df.loc[:, models]
+
+    # Append 'combined' column which contains list of sentiment ratings
+    temp["combined"] = temp.values.tolist()
+
+    # Filter DataFrame i.e. news with both postive (rating 5) and negative (rating 1)
+    cond = temp["combined"].map(lambda x: (5 in x) & (1 in x))
+    df_divergent = df.loc[cond, cols]
+    print(f"divergent news : {len(df_divergent)}")
+
+    # Ensure words are wrapped for 'title' and 'content' columns
+    return df_divergent.style.set_properties(
+        subset=["title", "content"], **{"width": "500px", "white-space": "normal"}
+    )

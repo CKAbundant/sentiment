@@ -42,22 +42,22 @@ class GenPriceAction:
 
     Args:
         date (str):
-            If provided, date when cointegration is performed.
-        senti_path (str):
-            Relative path to CSV file containing news sentiment rating
-            (Default: "./data/sentiment.csv").
+            If provided, date when news are scraped.
         stock_dir (str):
             Relative path to 'stock' folder (Default: "./data/stock").
         results_dir (str):
-            Relative path to 'results' folder (Default: "./data/results").
+            Relative path of folder containing price action for ticker pairs (i.e.
+            stock ticker and its cointegrated ticker) (Default: "./data/results").
         model_name (str):
             Name of FinBERT model in Huggi[ngFace (Default: "ziweichen").
+        period (int):
+            Time period used to compute cointegration (Default: 5).
         top_n (int):
             Top N number of stocks with lowest pvalue.
 
     Attributes:
         date (str):
-            If provided, date when cointegration is performed.
+            If provided, date when news are scraped.
         coint_path (str):
             If provided, relative path to CSV cointegration information (Default: None).
         senti_path (str):
@@ -65,10 +65,11 @@ class GenPriceAction:
             (Default: "./data/sentiment.csv").
         stock_dir (str):
             Relative path to stock folder (Default: "./data/stock").
-        results_dir (str):
-            Relative path to 'results' folder (Default: "./data/results").
         model_name (str):
             Name of FinBERT model in HuggingFace (Default: "ziweichen").
+        price_action_dir (str):
+            Relative path of folder containing price action of ticker pairs for specific
+            model and cointegration period.
         top_n (int):
             Top N number of stocks with lowest pvalue.
     """
@@ -76,26 +77,29 @@ class GenPriceAction:
     def __init__(
         self,
         date: str | None = None,
-        senti_path: str = "./data/sentiment.csv",
         stock_dir: str = "./data/stock",
         results_dir: str = "./data/results",
         model_name: str = "ziweichen",
+        period: int = 5,
         top_n: int = 10,
     ) -> None:
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
-        self.coint_path = f"./data/coint/{self.date}/coint_5y.csv"
-        self.senti_path = senti_path
+        self.coint_path = f"./data/coint/{self.date}/coint_{period}y.csv"
+        self.senti_path = f"./data/results/{self.date}/sentiment.csv"
         self.stock_dir = stock_dir
-        self.results_dir = results_dir
         self.model_name = model_name
+        self.price_action_dir = (
+            f"{results_dir}/{self.date}/{model_name}_{period}/price_actions"
+        )
         self.top_n = top_n
 
     def run(self) -> None:
         """Generate and save DataFrame including average sentiment rating and
         closing price of stock and co-integrated stock."""
 
-        # Load 'sentiment.csv'
+        # Load 'sentiment.csv' and 'coint_5y.csv'
         df_senti = pd.read_csv(self.senti_path)
+        df_coint = self.load_coint()
 
         for ticker in tqdm(df_senti["ticker"].unique()):
             # Filter specific ticker
@@ -115,7 +119,7 @@ class GenPriceAction:
             df_av = self.append_close(df_av, ticker)
 
             # Append closing price of top N co-integrated stocks with lowest pvalue
-            self.gen_topn_close(df_av, ticker)
+            self.gen_topn_close(df_av, df_coint, ticker)
 
     def load_coint(self) -> pd.DataFrame:
         """Load cointegration CSV file as DataFrame if available else generate
@@ -211,7 +215,9 @@ class GenPriceAction:
 
         return df
 
-    def gen_topn_close(self, data: pd.DataFrame, ticker: str) -> None:
+    def gen_topn_close(
+        self, df_av: pd.DataFrame, df_coint: pd.DataFrame, ticker: str
+    ) -> None:
         """Generate and save Dataframe for each 'top_n' cointegrated stocks with
         lowest pvalue.
 
@@ -219,6 +225,8 @@ class GenPriceAction:
             data (pd.DataFrame):
                 DataFrame containing average sentiment rating and closing price
                 for ticker.
+            df_coint (pd.DataFrame):
+                DataFrame containing cointegration info for stock ticker pairs.
             ticker (str):
                 Stock ticker whose news are sentiment-rated.
 
@@ -226,10 +234,10 @@ class GenPriceAction:
             None.
         """
 
-        df = data.copy()
+        df = df_av.copy()
 
         # Get list of cointegrated stocks with lowest pvalue
-        coint_list = self.get_topn_tickers(ticker)
+        coint_list = self.get_topn_tickers(ticker, df_coint)
 
         for coint_ticker in coint_list:
             # Generate and save DataFrame for each cointegrated stock
@@ -240,11 +248,13 @@ class GenPriceAction:
                 self.gen_price_action
             )
 
-            subfolder = f"{self.results_dir}/{self.date}"
-            utils.create_folder(subfolder)
+            # Create folder if not exist
+            utils.create_folder(self.price_action_dir)
 
-            file_path = f"{subfolder}/{ticker}_{coint_ticker}.csv"
+            file_name = f"{ticker}_{coint_ticker}.csv"
+            file_path = f"{self.price_action_dir}/{file_name}"
             utils.save_csv(df_coint_ticker, file_path, save_index=True)
+            print(f"Saved '{file_name}' at '{file_path}'")
 
     def gen_price_action(self, rating: int) -> str:
         """Return 'buy' if rating > 4, 'sell' if rating <= 2  else 'wait'."""
@@ -255,11 +265,18 @@ class GenPriceAction:
             return "sell"
         return "wait"
 
-    def get_topn_tickers(self, ticker: str) -> list[str]:
-        """Get list of top N stock with lowest pvalue for cointegration test with 'ticker'."""
+    def get_topn_tickers(self, ticker: str, df_coint: pd.DataFrame) -> list[str]:
+        """Get list of top N stock with lowest pvalue for cointegration test with 'ticker'.
 
-        # load cointegration CSV file if present
-        df_coint = self.load_coint()
+        Args:
+            ticker (str):
+                Stock ticker whose news are sentiment-rated.
+            df_coint (pd.DataFrame):
+                DataFrame containing cointegration info for stock ticker pairs.
+
+        Returns:
+            (list[str]): LIst of top N stocks with lowest cointegration pvalue.
+        """
 
         # Filter top N cointegrated stocks with lowest pvalue
         cond = ((df_coint["cointegrate"] == 1) & (df_coint["ticker1"] == ticker)) | (

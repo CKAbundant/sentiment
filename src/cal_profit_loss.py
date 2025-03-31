@@ -42,12 +42,6 @@ class StockTrade(BaseModel):
         description="Price when exiting long position", default=None
     )
 
-    @computed_field(description="Profit & loss once trade completed")
-    def profit_loss(self) -> Optional[Decimal]:
-        if self.exit_price is not None and self.entry_price is not None:
-            return self.exit_price - self.entry_price
-        return
-
     @computed_field(description="Number of days held for trade")
     def days_held(self) -> Optional[int]:
         if self.exit_date is not None and self.entry_date is not None:
@@ -55,9 +49,30 @@ class StockTrade(BaseModel):
             return days_held.days
         return
 
+    @computed_field(description="Profit/loss when trade completed")
+    def profit_loss(self) -> Optional[Decimal]:
+        if self.exit_price is not None and self.entry_price is not None:
+            profit_loss = self.exit_price - self.entry_price
+            return profit_loss
+        return
+
+    @computed_field(description="Percentage return of trade")
+    def percent_ret(self) -> Optional[Decimal]:
+        if self.exit_price is not None and self.entry_price is not None:
+            percent_ret = (self.exit_price - self.entry_price) / self.entry_price
+            return percent_ret.quantize(Decimal("1.000000"))
+        return
+
+    @computed_field(description="daily percentage return of trade")
+    def daily_ret(self) -> Optional[Decimal]:
+        if self.percent_ret is not None and self.days_held is not None:
+            daily_ret = (1 + self.percent_ret) ** (1 / Decimal(str(self.days_held))) - 1
+            return daily_ret.quantize(Decimal("1.000000"))
+        return
+
     @computed_field(description="Whether trade is profitable")
     def win(self) -> Optional[int]:
-        if (pl := self.profit_loss) is not None:
+        if (pl := self.percent_ret) is not None:
             return int(pl > 0)
         return
 
@@ -86,12 +101,23 @@ class CalProfitLoss:
     Args:
         date (str):
             If provided, date when cointegration is performed.
+        results_dir (str):
+            Relative path of folder containing price action for ticker pairs (i.e.
+            stock ticker and its cointegrated ticker) (Default: "./data/results").
+        model_name (str):
+            Name of FinBERT model in Huggi[ngFace (Default: "ziweichen").
+        period (int):
+            Time period used to compute cointegration (Default: 5).
 
     Attributes:
         date (str):
-            If provided, date when cointegration is performed.
-        results_dir (str):
-            Relative path containing price action csv files for computing profit & loss.
+            If provided, date when news are scraped.
+        model_dir (str):
+            Relative path of folder containing summary reports for specific
+            model and cointegration period.
+        price_action_dir (str):
+            Relative path of folder containing price action of ticker pairs for specific
+            model and cointegration period.
         open_trades (list[StockTrade]):
             List containing only open trades
         num_open (int):
@@ -100,9 +126,16 @@ class CalProfitLoss:
             List containing stock tickers with no completed trades.
     """
 
-    def __init__(self, date: str | None = None) -> None:
+    def __init__(
+        self,
+        date: str | None = None,
+        results_dir: str = "./data/results",
+        model_name: str = "ziweichen",
+        period: int = 5,
+    ) -> None:
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
-        self.results_dir = f"./data/results/{self.date}"
+        self.model_dir = f"{results_dir}/{self.date}/{model_name}_{period}"
+        self.price_action_dir = f"{self.model_dir}/price_actions"
         self.open_trades = []
         self.num_open = 0
         self.no_trades = []
@@ -123,45 +156,47 @@ class CalProfitLoss:
             df_breakdown (pd.DataFrame):
                 DataFrame containing breakdown of statistics for each
                 ticker-cointegrated ticker pair.
+            df_top_ret_paris (pd.DataFrame):
+                DataFrame containing ticker pairs with highest annualized returns
+                for specific stock ticker.
         """
 
-        if not Path(self.results_dir).is_dir():
-            print(f"'{self.results_dir}' folder doesn't exist.")
-            return
+        if not Path(self.price_action_dir).is_dir():
+            raise FileNotFoundError(
+                f"'{self.price_action_dir}' folder doesn't exist i.e. no price-actions "
+                "csv files available for profit loss computation."
+            )
 
         # List to store DataFrames containing completed trades info
         results_list = []
-        files_list = [
-            file_path
-            for file_path in Path(self.results_dir).rglob("*.csv")
-            if file_path.name != "trade_results.csv"
-        ]
 
-        for file_path in tqdm(files_list):
+        for file_path in tqdm(Path(self.price_action_dir).rglob("*.csv")):
             # Load price action csv file
             df = utils.load_csv(file_path)
 
             # Get ticker and cointegrated ticker from file name
             ticker, coint_ticker = self.get_tickers(file_path)
 
-            # Update completed trades for cointegrated ticker
+            # Append DataFrame containining completed trades for cointegrated ticker
             results_list.append(self.record_trades(df, ticker, coint_ticker))
-
-        print(f"\nself.no_trades : {self.no_trades}\n")
 
         # Combine all DataFrames
         df_results = pd.concat(results_list, axis=0).reset_index(drop=True)
 
+        # Create folder if not present
+        utils.create_folder(self.model_dir)
+
         # Save combined DataFrame
         utils.save_csv(
-            df_results, f"{self.results_dir}/trade_results.csv", save_index=False
+            df_results, f"{self.model_dir}/trade_results.csv", save_index=False
         )
 
         # Generate overall and breakdown summary
-        df_summary = self.gen_overall_summary()
+        df_overall = self.gen_overall_summary()
         df_breakdown = self.gen_breakdown_summary()
+        df_top_ret_pair = self.gen_top_ret_pair(df_breakdown)
 
-        return df_results, df_summary, df_breakdown
+        return df_results, df_overall, df_breakdown, df_top_ret_pair
 
     def get_tickers(self, file_path: Path) -> list[str, str]:
         """Get stock ticker and its cointegrated stock tick from file path."""
@@ -268,15 +303,24 @@ class CalProfitLoss:
     def gen_overall_summary(self) -> pd.DataFrame:
         """Generate summary info from 'trade_results.csv'."""
 
-        df = utils.load_csv(f"{self.results_dir}/trade_results.csv")
+        df = utils.load_csv(f"{self.model_dir}/trade_results.csv")
 
+        # Get info on stock tickers used to generate news articles
+        no_trades = sorted(list(set(self.no_trades)))
+        trades = df["ticker"].unique().tolist()
+        num_tickers_with_no_trades = len(no_trades)
+        num_tickers_with_trades = len(trades)
+        total_num_tickers = num_tickers_with_no_trades + num_tickers_with_trades
+
+        # trade info
         total_trades = len(df)
         total_wins = df["win"].sum()
         total_loss = total_trades - total_wins
         first_entry_date = df["entry_date"].min()
-        last_entry_date = df["entry_date"].max()
         last_exit_date = df["exit_date"].max()
         trading_period = Decimal((last_exit_date - first_entry_date).days)
+
+        # Profit/loss info
         total_profit = df["profit_loss"].sum()
         total_investment = df["entry_price"].sum()
         percent_ret = (total_profit / total_investment).quantize(Decimal("1.000000"))
@@ -284,11 +328,12 @@ class CalProfitLoss:
             Decimal("1.000000")
         )
 
-        print(f"\ndf['ticker'].nunique() : {df['ticker'].nunique()}\n")
-
         overall = {
-            "stock_ticker_without_trades": ", ".join(sorted(list(set(self.no_trades)))),
-            "stock_ticker_with_trades": ", ".join(df["ticker"].unique().tolist()),
+            "total_num_stock_tickers": total_num_tickers,
+            "num_tickers_with_no_trades": num_tickers_with_no_trades,
+            "stock_ticker_without_trades": ", ".join(no_trades),
+            "num_tickers_with_trades": num_tickers_with_trades,
+            "stock_ticker_with_trades": ", ".join(trades),
             "total_num_trades": total_trades,
             "total_num_wins": total_wins,
             "total_num_loss": total_loss,
@@ -297,10 +342,14 @@ class CalProfitLoss:
             "max_profit": df["profit_loss"].max(),
             "mean_profit": df["profit_loss"].mean(),
             "median_profit": df["profit_loss"].median(),
-            "total_investment": total_investment,
             "first_trade": first_entry_date,
-            "last_trade": last_entry_date,
+            "last_trade": df["entry_date"].max(),
+            "min_days_held": df["days_held"].min(),
+            "max_days_held": df["days_held"].max(),
+            "mean_days_held": df["days_held"].mean(),
+            "median_days_held": df["days_held"].median(),
             "trading_period": trading_period,
+            "total_investment": total_investment,
             "percent_return": percent_ret,
             "annualized_return": annual_ret,
         }
@@ -310,57 +359,96 @@ class CalProfitLoss:
             overall, orient="index", columns=["Overall Statistics"]
         )
         utils.save_csv(
-            df_overall, f"{self.results_dir}/overall_summary.csv", save_index=True
+            df_overall, f"{self.model_dir}/overall_summary.csv", save_index=True
         )
-
-        print(f"df_overall : \n\n{df_overall}\n")
 
         return df_overall
 
     def gen_breakdown_summary(self) -> pd.DataFrame:
         """Generate breakdown summary for each ticker-cointegrated ticker pair."""
 
-        df = utils.load_csv(f"{self.results_dir}/trade_results.csv")
+        df = utils.load_csv(f"{self.model_dir}/trade_results.csv")
 
         # Compute aggregated values for each ticker-coint_ticker pair
-        df_summary = df.groupby(by=["ticker", "coint_ticker"]).agg(
+        df_breakdown = df.groupby(by=["ticker", "coint_ticker"]).agg(
             {
                 "entry_date": ["min", "max"],
                 "exit_date": "max",
                 "days_held": ["min", "max", "mean", "median"],
                 "entry_price": "sum",
                 "profit_loss": ["min", "max", "mean", "median", "sum"],
+                "daily_ret": ["min", "max", "mean", "median"],
                 "win": ["count", "sum"],
             }
         )
 
+        # 'mean' and 'median' operation generates float output
+        # Round to 6 decimal places and convert to decimal type
+        df_breakdown = utils.set_decimal_type(df_breakdown, to_round=True)
+
         # Append 'trading_period' column
-        days_held = pd.to_datetime(df_summary[("exit_date", "max")]) - pd.to_datetime(
-            df_summary[("entry_date", "min")]
+        days_held = pd.to_datetime(df_breakdown[("exit_date", "max")]) - pd.to_datetime(
+            df_breakdown[("entry_date", "min")]
         )
-        df_summary["trading_period"] = days_held.map(
+        df_breakdown["trading_period"] = days_held.map(
             lambda delta: Decimal(str(delta.days))
         )
 
         # Append 'percent_ret' column rounded to nearest 6 significant figures
         percent_ret = (
-            df_summary[("profit_loss", "sum")] / df_summary[("entry_price", "sum")]
+            df_breakdown[("profit_loss", "sum")] / df_breakdown[("entry_price", "sum")]
         )
-        df_summary["percent_ret"] = percent_ret.map(
+        df_breakdown["overall_percent_ret"] = percent_ret.map(
             lambda num: num.quantize(Decimal("1.000000"))
         )
 
         # Append 'annualized_returns' column
-        annual_ret = (1 + df_summary["percent_ret"]) ** (
-            365 / df_summary["trading_period"]
-        )
-        df_summary["annual_ret"] = annual_ret.map(
+        daily_ret = (1 + df_breakdown["overall_percent_ret"]) ** (
+            1 / df_breakdown["trading_period"]
+        ) - 1
+        df_breakdown["overall_daily_ret"] = daily_ret.map(
             lambda num: num.quantize(Decimal("1.000000"))
         )
 
         # Save as csv file
         utils.save_csv(
-            df_summary, f"{self.results_dir}/breakdown_summary.csv", save_index=True
+            df_breakdown, f"{self.model_dir}/breakdown_summary.csv", save_index=True
         )
 
-        return df_summary
+        return df_breakdown
+
+    def gen_top_ret_pair(self, df_breakdown: pd.DataFrame) -> pd.DataFrame:
+        """Filter ticker-cointegrated ticker pair with highest annualized return
+        for each ticker.
+
+        Args:
+            df_summary (pd.DataFrame):
+                Multi-level DataFrame containing aggregated values of completed trades.
+
+        Returns:
+            df_highest (pd.DataFrame):
+                Multi-level DataFrame containing ticker pair with highest annualized
+                return for each ticker.
+        """
+
+        df = df_breakdown.copy()
+
+        # Group by ticker i.e. level 0
+        grouped = df.groupby(level=0)
+
+        # Get ticker pair with highest annualized returns for each ticker
+        highest_pairs = grouped.apply(
+            lambda group: group.loc[group["overall_daily_ret"].idxmax()].name
+        )
+
+        # DataFrame filtered by 'highest_pairs'
+        df_highest = df.loc[highest_pairs, :].sort_values(
+            by=["overall_daily_ret"], ascending=False
+        )
+
+        # Save as csv file
+        utils.save_csv(
+            df_highest, f"{self.model_dir}/top_ticker_pairs.csv", save_index=True
+        )
+
+        return df_highest

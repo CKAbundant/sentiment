@@ -24,10 +24,12 @@ info. Reason being Scrapling is not able to perform scrolling.
 import re
 import time
 from functools import partial
+from pathlib import Path
 
 import pandas as pd
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
+from tqdm import tqdm
 
 from src.sentiment import SentimentRater
 from src.utils import utils, yahoo_utils
@@ -45,6 +47,8 @@ class GenData:
         >>> result_df = poc.run()
 
     Args:
+        date (str):
+            If provided, date when news are scraped.
         base_url (str):
             URL to Yahoo Finance to specifics stock news by replacing 'ticker' with
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news").
@@ -58,8 +62,13 @@ class GenData:
             List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
             "yiyanghkust/finbert-tone", "ZiweiChen/FinBERT-FOMC",
             "AventIQ-AI/finbert-sentiment-analysis"]).
+        results_dir (str):
+            Relative path of folder containing price action for ticker pairs (i.e.
+            stock ticker and its cointegrated ticker) (Default: "./data/results").
 
     Attributes:
+        date (str):
+            If provided, date when news are scraped.
         base_url (str):
             URL to Yahoo Finance to specifics stock news by replacing 'ticker' with
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news).
@@ -73,10 +82,14 @@ class GenData:
             List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
             "yiyanghkust/finbert-tone", "ZiweiChen/FinBERT-FOMC",
             "AventIQ-AI/finbert-sentiment-analysis"]).
+        results_dir (str):
+            Relative path of folder containing price action for ticker pairs (i.e.
+            stock ticker and its cointegrated ticker) (Default: "./data/results").
     """
 
     def __init__(
         self,
+        date: str | None = None,
         base_url: str = "https://finance.yahoo.com/quote/{ticker}/news",
         stock_list: list[str] = [
             "AAPL",
@@ -106,17 +119,24 @@ class GenData:
             "ZiweiChen/FinBERT-FOMC",  # FOMC reports
             "AventIQ-AI/finbert-sentiment-analysis",  # General English quotes
         ],
+        results_dir: str = "./data/results",
     ):
+        self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.base_url = base_url
         self.stock_list = stock_list
         self.max_scrolls = max_scrolls
         self.model_list = model_list
+        self.results_dir = results_dir
 
     def run(self) -> pd.DataFrame:
         """Generate DataFrame containing news extracted from Yahoo Finance; and
         generate sentiment score."""
 
         df_list = []
+
+        # Create 'results' folder if not exist
+        if not Path(self.results_dir).is_dir():
+            utils.create_folder(self.results_dir)
 
         for ticker in self.stock_list:
             print(f"\nticker : {ticker}")
@@ -139,13 +159,11 @@ class GenData:
         # Combine list of DataFrames row-wise and Append sentiment scores
         # for different rater. Save DataFrame as csv file
         df_combine = pd.concat(df_list, axis=0).reset_index(drop=True)
-        df_combine.to_csv("./data/news.csv", index=False)
-
-        df_combine = pd.read_csv("./data/news.csv")
+        df_combine.to_csv(f"{self.results_dir}/{self.date}/news.csv", index=False)
 
         # Append sentiment scores for various FinBERT models
         df_combine = self.append_sentiment_scores(df_combine)
-        df_combine.to_csv("./data/sentiment.csv", index=False)
+        df_combine.to_csv(f"{self.results_dir}/{self.date}/sentiment.csv", index=False)
 
         return df_combine
 
@@ -341,7 +359,7 @@ class GenData:
 
         df = df_news.copy()
 
-        for model_name in self.model_list:
+        for model_name in tqdm(self.model_list):
             # Get column name for sentiment rating
             col_name = self.get_col_name(model_name)
 
