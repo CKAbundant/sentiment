@@ -35,7 +35,8 @@ def main() -> None:
         print(f"\nsentiment : \n\n{df_senti}\n")
 
     # Download OHLCV data for S&P500 stocks
-    download_ohlcv = DownloadOHLCV()
+    download_ohlcv = DownloadOHLCV(end_date=date)
+    download_ohlcv.run()
 
     # Generate price action of top 10 stocks with lowest cointegration pvalue
     # with selected stocks

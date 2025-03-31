@@ -8,16 +8,10 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import networkx as nx
 import pandas as pd
-import yfinance as yf
 from matplotlib.figure import Figure
-from pyrate_limiter import Duration, Limiter, RequestRate
-from requests import Session
-from requests_cache import CacheMixin, SQLiteCache
-from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
 from scipy import stats
 from statsmodels.tsa.stattools import coint
 from tqdm import tqdm
-from yfinance.exceptions import YFPricesMissingError
 
 from src.utils import utils
 
@@ -33,19 +27,8 @@ class GetRel:
         >>> co_integrate.run()
 
     Args:
-        url (str):
-            URL to download updated list of S&P500 stocks
-            (Default: "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies").
-        start_date (str):
-            Start date to download daily stock OHLCV data (Default: "2020-01-01").
-        end_date (str):
-            End date to download daily stock OHLCV data. If None,
-            current date will be used (Default: None).
-        batch_size (int):
-            Number of tickers to download concurrently (Default: 20).
-        ignore_list (list[str]):
-            List of stocks to ignore due to data inavailbility in yfinance
-            (Default: ["BRK.B", "BF.B", "CTAS"]).
+        date (str):
+            If provided, date when news are scraped.
         stock_dir (str):
             Relative path to folder containing stocks OHLCV data
             (Default: "./data/stock").
@@ -54,19 +37,8 @@ class GetRel:
             (Default: "./data/coint").
 
     Attributes:
-        url (str):
-            URL to download updated list of S&P500 stocks
-            (Default: "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies").
-        start_date (str):
-            Start date to download daily stock OHLCV data (Default: "2020-01-01").
-        end_date (str | None):
-            If provided, end date to download daily stock OHLCV data. If None,
-            current date will be used (Default: None).
-        batch_size (int):
-            Number of tickers to download concurrently (Default: 10).
-        ignore_list (list[str]):
-            List of stocks to ignore due to data inavailbility in yfinance
-            (Default: ["BRK.B", "BF.B", "CTAS"]).
+        date (str):
+            If provided, date when news are scraped.
         stock_dir (str):
             Relative path to folder containing stocks OHLCV data
             (Default: "./data/stock").
@@ -86,15 +58,14 @@ class GetRel:
 
     def __init__(
         self,
+        date: str | None = None,
         stock_dir: str = "./data/stock",
         coint_dir: str = "./data/coint",
     ) -> None:
+        self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.stock_dir = stock_dir
         self.coint_dir = coint_dir
         self.coint_date_dir = f"{coint_dir}/{self.end_date}"
-        self.stock_list = self.gen_stock_list()
-        self.session = None
-        self.unsuccessful = []
 
     def run(self) -> None:
         """Calculate correlation and cointegration between all pair combinations
@@ -234,16 +205,12 @@ class GetRel:
         """Filter DataFrame to contain past 'num_years' years of records."""
 
         # Latest date in DataFrame
-        req_earliest = self.cal_req_earliest(df, num_years)
+        latest = df.index.max()
+
+        # Get the earliest date based on 'num_years' period
+        req_earliest = latest - pd.DateOffset(years=num_years)
 
         return df.loc[df.index >= req_earliest, :].reset_index(drop=True)
-
-    def cal_req_earliest(self, data: pd.DataFrame, num_years: int) -> pd.Timestamp:
-        """Calculate required earliest date for DataFrame to contain past
-        'num_years' years of records."""
-
-        latest = data.index.max()
-        return latest - pd.DateOffset(years=num_years)
 
     def is_enough(self, ticker: str, num_years: int) -> bool:
         """Check whether there is enough data for cointegration computation.
