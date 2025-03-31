@@ -13,6 +13,7 @@ if repo_dir not in sys.path:
     sys.path.append(repo_dir)
 
 from src.cal_profit_loss import CalProfitLoss
+from src.download_ohlcv import DownloadOHLCV
 from src.gen_data import GenData
 from src.gen_price_action import GenPriceAction
 from src.utils import utils
@@ -32,6 +33,9 @@ def main() -> None:
         gen_data = GenData(date=date)
         df_senti = gen_data.run()
         print(f"\nsentiment : \n\n{df_senti}\n")
+
+    # Download OHLCV data for S&P500 stocks
+    download_ohlcv = DownloadOHLCV()
 
     # Generate price action of top 10 stocks with lowest cointegration pvalue
     # with selected stocks
