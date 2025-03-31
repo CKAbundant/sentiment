@@ -159,11 +159,11 @@ class GenData:
         # Combine list of DataFrames row-wise and Append sentiment scores
         # for different rater. Save DataFrame as csv file
         df_combine = pd.concat(df_list, axis=0).reset_index(drop=True)
-        df_combine.to_csv("./data/news.csv", index=False)
+        df_combine.to_csv(f"{self.results_dir}/{self.date}/news.csv", index=False)
 
         # Append sentiment scores for various FinBERT models
         df_combine = self.append_sentiment_scores(df_combine)
-        df_combine.to_csv("./data/sentiment.csv", index=False)
+        df_combine.to_csv(f"{self.results_dir}/{self.date}/sentiment.csv", index=False)
 
         return df_combine
 

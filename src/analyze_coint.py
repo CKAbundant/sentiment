@@ -45,7 +45,7 @@ class AnalyzeCoint:
         top_n: int = 20,
     ) -> None:
         self.coint_dir = coint_dir
-        self.coint_paths = list(Path(self.coint_dir).rglob("*.csv"))
+        self.coint_paths = sorted(list(Path(self.coint_dir).rglob("*.csv")))
         self.top_n = top_n
 
     def __call__(self, ticker: str) -> pd.DataFrame:

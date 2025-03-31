@@ -18,6 +18,37 @@ from src.gen_price_action import GenPriceAction
 from src.utils import utils
 
 
+def main() -> None:
+    """Generate proof-of-concept by running instance of Poc class."""
+
+    # Get arguments from command line
+    args = parse_arguments()
+    date = args.date
+    no_sentiment = args.no_sentiment
+
+    if not no_sentiment:
+        # Generate DataFrame containing news and sentiment scores for different
+        # FinBERT variant.
+        gen_data = GenData(date=date)
+        df_senti = gen_data.run()
+        print(f"\nsentiment : \n\n{df_senti}\n")
+
+    # Generate price action of top 10 stocks with lowest cointegration pvalue
+    # with selected stocks
+    gen_pa = GenPriceAction(date=date)
+    gen_pa.run()
+
+    # # Compile profit and loss; and generate reports
+    # cal_pl = CalProfitLoss(date=date)
+    # df_results, df_overall, df_breakdown, df_top_ret_pairs = cal_pl.run()
+    # print(f"df_results : \n\n{pformat(df_results)}\n")
+    # print(f"df_overall : \n\n{pformat(df_overall)}\n")
+    # print(f"df_breakdown : \n\n{pformat(df_breakdown)}\n")
+    # print(f"df_top_ret_pairs : \n\n{pformat(df_top_ret_pairs)}\n")
+
+    # Test out different strategies
+
+
 def parse_arguments() -> Namespace:
     """Parse optional 'date' and 'no-sentiment' flags from command line."""
 
@@ -41,33 +72,8 @@ def parse_arguments() -> Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
-    """Generate proof-of-concept by running instance of Poc class."""
-
-    # Get arguments from command line
-    args = parse_arguments()
-    date = args.date
-    no_sentiment = args.no_sentiment
-
-    if not no_sentiment:
-        # Generate DataFrame containing news and sentiment scores for different
-        # FinBERT variant.
-        gen_data = GenData(date=date)
-        df_senti = gen_data.run()
-        print(f"\nsentiment : \n\n{df_senti}\n")
-
-    # Generate price action of top 10 stocks with lowest cointegration pvalue
-    # with selected stocks
-    gen_pa = GenPriceAction(date=date)
-    gen_pa.run()
-
-    # Compile profit and loss
-    cal_pl = CalProfitLoss(date=date)
-    df_results, df_overall, df_breakdown, df_top_ret_pairs = cal_pl.run()
-    print(f"df_results : \n\n{pformat(df_results)}\n")
-    print(f"df_overall : \n\n{pformat(df_overall)}\n")
-    print(f"df_breakdown : \n\n{pformat(df_breakdown)}\n")
-    print(f"df_top_ret_pairs : \n\n{pformat(df_top_ret_pairs)}\n")
+def test_strategies() -> pd.DataFrame:
+    """"""
 
 
 if __name__ == "__main__":

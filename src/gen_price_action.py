@@ -43,9 +43,6 @@ class GenPriceAction:
     Args:
         date (str):
             If provided, date when news are scraped.
-        senti_path (str):
-            Relative path to CSV file containing news sentiment rating
-            (Default: "./data/sentiment.csv").
         stock_dir (str):
             Relative path to 'stock' folder (Default: "./data/stock").
         results_dir (str):
@@ -53,6 +50,8 @@ class GenPriceAction:
             stock ticker and its cointegrated ticker) (Default: "./data/results").
         model_name (str):
             Name of FinBERT model in Huggi[ngFace (Default: "ziweichen").
+        period (int):
+            Time period used to compute cointegration (Default: 5).
         top_n (int):
             Top N number of stocks with lowest pvalue.
 
@@ -66,11 +65,11 @@ class GenPriceAction:
             (Default: "./data/sentiment.csv").
         stock_dir (str):
             Relative path to stock folder (Default: "./data/stock").
-        results_dir (str):
-            Relative path of folder containing price action for ticker pairs (i.e.
-            stock ticker and its cointegrated ticker) (Default: "./data/results").
         model_name (str):
             Name of FinBERT model in HuggingFace (Default: "ziweichen").
+        price_action_dir (str):
+            Relative path of folder containing price action of ticker pairs for specific
+            model and cointegration period.
         top_n (int):
             Top N number of stocks with lowest pvalue.
     """
@@ -78,27 +77,25 @@ class GenPriceAction:
     def __init__(
         self,
         date: str | None = None,
-        senti_path: str = "./data/sentiment.csv",
         stock_dir: str = "./data/stock",
         results_dir: str = "./data/results",
         model_name: str = "ziweichen",
+        period: int = 5,
         top_n: int = 10,
     ) -> None:
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
-        self.coint_path = f"./data/coint/{self.date}/coint_5y.csv"
-        self.senti_path = senti_path
+        self.coint_path = f"./data/coint/{self.date}/coint_{period}y.csv"
+        self.senti_path = f"./data/results/{self.date}/sentiment.csv"
         self.stock_dir = stock_dir
-        self.results_dir = results_dir
         self.model_name = model_name
+        self.price_action_dir = (
+            f"{results_dir}/{self.date}/{model_name}_{period}/price_actions"
+        )
         self.top_n = top_n
 
     def run(self) -> None:
         """Generate and save DataFrame including average sentiment rating and
         closing price of stock and co-integrated stock."""
-
-        # Create 'results' and 'reports' folder if not exist
-        if not Path(self.reports_dir).is_dir():
-            utils.create_folder(self.reports_dir)
 
         # Load 'sentiment.csv' and 'coint_5y.csv'
         df_senti = pd.read_csv(self.senti_path)
@@ -219,7 +216,7 @@ class GenPriceAction:
         return df
 
     def gen_topn_close(
-        self, data: pd.DataFrame, df_coint: pd.DataFrame, ticker: str
+        self, df_av: pd.DataFrame, df_coint: pd.DataFrame, ticker: str
     ) -> None:
         """Generate and save Dataframe for each 'top_n' cointegrated stocks with
         lowest pvalue.
@@ -237,7 +234,7 @@ class GenPriceAction:
             None.
         """
 
-        df = data.copy()
+        df = df_av.copy()
 
         # Get list of cointegrated stocks with lowest pvalue
         coint_list = self.get_topn_tickers(ticker, df_coint)
@@ -251,11 +248,11 @@ class GenPriceAction:
                 self.gen_price_action
             )
 
-            subfolder = f"{self.results_dir}/{self.date}"
-            utils.create_folder(subfolder)
+            # Create folder if not exist
+            utils.create_folder(self.price_action_dir)
 
             file_name = f"{ticker}_{coint_ticker}.csv"
-            file_path = f"{subfolder}/{file_name}"
+            file_path = f"{self.price_action_dir}/{file_name}"
             utils.save_csv(df_coint_ticker, file_path, save_index=True)
             print(f"Saved '{file_name}' at '{file_path}'")
 

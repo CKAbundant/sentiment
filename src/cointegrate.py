@@ -14,6 +14,7 @@ from pyrate_limiter import Duration, Limiter, RequestRate
 from requests import Session
 from requests_cache import CacheMixin, SQLiteCache
 from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
+from scipy import stats
 from statsmodels.tsa.stattools import coint
 from tqdm import tqdm
 from yfinance.exceptions import YFPricesMissingError
@@ -72,6 +73,8 @@ class CoIntegrate:
         coint_dir (str):
             Relative path to folder containing cointegration information
             (Default: "./data/coint").
+        coint_date_dir (str):
+            Relative path to subfolder under 'coint_dir'.
         stock_list (list[str]):
             List containing S&P500 stocks.
         session (CachedLimiterSession):
@@ -98,6 +101,7 @@ class CoIntegrate:
         self.ignore_list = ignore_list
         self.stock_dir = stock_dir
         self.coint_dir = coint_dir
+        self.coint_date_dir = f"{coint_dir}/{self.end_date}"
         self.stock_list = self.gen_stock_list()
         self.session = None
         self.unsuccessful = []
@@ -112,6 +116,7 @@ class CoIntegrate:
         # Perform cointegration analysis for 5, 3 and 1 year
         for num_years in [5, 3, 1]:
             df_coint = self.cal_cointegration(num_years)
+            df_coint = self.append_correlation(df_coint, num_years)
             # self.plot_network_graph(df_coint, f"coint_{num_years}yr.png")
 
         return df_coint
@@ -457,3 +462,42 @@ class CoIntegrate:
             return "blue"
         if 0 <= pvalue < 0.01:
             return "darkblue"
+
+    def gen_correlation(self, df_coint: pd.DataFrame, num_years: int) -> None:
+        """Generate DataFrame containing Pearson, Spearman and Kendall correltion
+        for comparision with cointegration.
+
+        Args:
+            num_years (int): Number of years required to compute cointegration.
+
+        Returns:
+            (pd.DataFrame):
+                DataFrame containing cointegration and correlation values
+                for each ticker pair.
+        """
+
+        df = df_coint.loc[:, ["ticker1", "ticker2"]].copy()
+        records = []
+
+        for ticker1, ticker2 in df.itertuples(index=False, name=None):
+            # Get equal length 'Close' price for both tickers
+            df_close = self.gen_timeseries(ticker1, ticker2, num_years)
+
+            # Compute Pearson, Spearman and Kendall correlation
+            pearson_results = stats.pearsonr(df_close[ticker1], df_close[ticker2])
+            spearman_results = stats.spearmanr(df_close[ticker1], df_close[ticker2])
+            kendall_results = stats.kendalltau(df_close[ticker1], df_close[ticker2])
+
+            record = {
+                "pearson_corr": pearson_results.statistic,
+                "pearson_pvalue": pearson_results.pvalue,
+                "spearman_corr": spearman_results.statistic,
+                "spearman_pvalue": spearman_results.pvalue,
+                "kendall_corr": kendall_results.statistic,
+                "kendall_pvalue": kendall_results.pvalue,
+            }
+            records.append(record)
+
+        # Convert to DataFrame
+        df_corr = pd.DataFrame(records)
+        df_corr.to_csv(f"{self.coint_date_dir}/correlation.csv")
