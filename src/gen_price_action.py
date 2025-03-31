@@ -29,7 +29,7 @@ import pandas as pd
 import pandas_market_calendars as mcal
 from tqdm import tqdm
 
-from src.cointegrate import CoIntegrate
+from src.get_rel import GetRel
 from src.utils import utils
 
 
