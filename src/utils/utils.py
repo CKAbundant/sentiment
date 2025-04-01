@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 
 
-def get_current_dt(fmt: str = "%Y%m%d_%H%M") -> str:
-    """Return current datetime as string with 'specific' format."""
+def get_current_dt(fmt: str = "%Y%m%d_%H%M", tz: str = "America/New_York") -> str:
+    """Return current datetimeas string with 'specific' format."""
 
     return datetime.now().strftime(fmt)
 
@@ -61,6 +61,27 @@ def gen_stock_list(
         stock_dict[sector] = random.choice(sector_list)
 
     return stock_dict
+
+
+def gen_snp500_list(url: str, ignore_list: list[str]) -> list[str]:
+    """Generate updated list of S&P500 stocks from given url.
+
+    Args:
+        url (str):
+            URL to download complete list of S&P500 stocks
+            (Default: "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies").
+        ignore_list (list[str]):
+            List of stock tickers, which do not have OHLCV data from yfinance.
+
+    Returns:
+        (list[str]): list of S&P 500 stocks.
+    """
+
+    # Get DataFrame containing info on S&P500 stocks
+    df_info, _ = pd.read_html(url)
+
+    # Remove stocks in 'self.ignore_list' from list of S&P500 stocks
+    return [stock for stock in df_info["Symbol"].to_list() if stock not in ignore_list]
 
 
 def get_gics_sector(

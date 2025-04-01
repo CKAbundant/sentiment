@@ -1,9 +1,8 @@
 """Class to perform cointegration for S&P 500 stocks"""
 
-import csv
-import time
 from itertools import combinations
 from pathlib import Path
+from typing import get_args
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -13,6 +12,7 @@ from scipy import stats
 from statsmodels.tsa.stattools import coint
 from tqdm import tqdm
 
+from config.variables import CORR_FN
 from src.utils import utils
 
 
@@ -29,6 +29,8 @@ class CalCointCorr:
         >>> get_rel.run()
 
     Args:
+        snp500_list (list[str]):
+            List of S&P 500 list.
         date (str):
             If provided, date when news are scraped.
         periods (list[int]):
@@ -40,10 +42,12 @@ class CalCointCorr:
         coint_corr_dir (str):
             Relative path to folder containing cointegration and correlation information
             (Default: "./data/coint_corr").
-        corr_models (list[str]):
-            List of correlation models (Default: ["pearsonr", "spearmanr", "kendalltau"]).
+        corr_fn_list (tuple[str] | None):
+            If provided, list of correlation functions.
 
     Attributes
+        snp500_list (list[str]):
+            List of S&P 500 list.
         date (str):
             If provided, date when news are scraped.
         periods (list[int]):
@@ -57,24 +61,26 @@ class CalCointCorr:
             (Default: "./data/coint_corr").
         coint_corr_date_dir (str):
             Relative path to subfolder under 'coint_corr_dir'.
-        corr_models (list[str]):
-            List of correlation models (Default: ["pearsonr", "spearmanr", "kendalltau"]).
+        corr_fn_list (tuple[str]):
+            List of correlation functions (Default: ("pearsonr", "spearmanr", "kendalltau")).
     """
 
     def __init__(
         self,
+        snp500_list: list[str],
         date: str | None = None,
         periods: list[int] = [1, 3, 5],
         stock_dir: str = "./data/stock",
         coint_corr_dir: str = "./data/coint_corr",
-        corr_models: list[str] = ["pearsonr", "spearmanr", "kendalltau"],
+        corr_fn_list: tuple[str] | None = None,
     ) -> None:
+        self.snp500_list = snp500_list
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.periods = periods
         self.stock_dir = stock_dir
         self.coint_corr_dir = coint_corr_dir
         self.coint_corr_date_dir = f"{coint_corr_dir}/{self.date}"
-        self.corr_models = corr_models
+        self.corr_fn_list = corr_fn_list or get_args(CORR_FN)
 
     def run(self) -> None:
         """Generate DataFrame containing correlation and cointegration between
@@ -82,34 +88,36 @@ class CalCointCorr:
 
         # Perform correlation and cointegration analysis for 5, 3 and 1 year
         for num_years in self.periods:
-            self.gen_coint_corr_df(num_years)
+            # Path to csv file containing required cointegration and correlation data
+            coint_corr_path = f"{self.coint_corr_date_dir}/coint_corr_{num_years}y.csv"
 
-    def gen_coint_corr_df(self, num_years: int, coint_corr_path: str) -> None:
-        """Generate DataFrame containing cointegration and/or correlation
-        between closing price of ticker pairs.
+            # If file exist, skip cointegration and correlation computation
+            if Path(coint_corr_path).is_file():
+                print(f"'{coint_corr_path}' exist. No further computation required.")
+                return
+
+            # Ensure subfolder exist
+            utils.create_folder(self.coint_corr_date_dir)
+
+            # Generate DataFrame containing cointegration and correlation info
+            df_coint_corr = self.gen_coint_corr_df(num_years)
+            df_coint_corr.to_csv(coint_corr_path, index=False)
+
+    def gen_coint_corr_df(self, num_years: int) -> pd.DataFrame:
+        """Generate DataFrame containing cointegration and correlation
+        between closing price of all S&P500 ticker pairs.
 
         Args:
             num_years (int):
                 Number of years required to compute cointegration.
-            coint_corr_path (str):
-                Relative path to save csv file containing cointegration and
-                correlation info.
 
         Returns:
-            None.
+            (pd.DataFrame):
+                DataFrame containing cointegration and correlation info.
         """
-
-        # If file exist, skip cointegration and correlation computation
-        coint_corr_path = f"{self.coint_corr_date_dir}/coint_corr_{num_years}y.csv"
-        if Path(coint_corr_path).is_file():
-            print(f"'{coint_corr_path}' exist. No further computation required.")
-            return
 
         # Get list of tickers with enough data for cointegration computation
         updated_list = self.get_enough_period(num_years)
-
-        # Ensure subfolder exist
-        utils.create_folder(self.coint_corr_date_dir)
 
         records = []
 
@@ -128,8 +136,7 @@ class CalCointCorr:
                 print(f"Error encountered for {ticker1}-{ticker2} : {e}")
 
         # Convert to DataFrame; and save as csv file
-        df_coint_corr = pd.DataFrame(records)
-        df_coint_corr.to_csv(coint_corr_path, index=False)
+        return pd.DataFrame(records)
 
     def cal_coint_corr(
         self, df_close: pd.DataFrame, ticker1: str, ticker2
@@ -160,14 +167,14 @@ class CalCointCorr:
             "coint": coint_pvalue,
         }
 
-        for corr_model in self.corr_models:
-            if not hasattr(stats, corr_model):
-                raise ModuleNotFoundError(f"{corr_model} is an invalid Scipy model.")
+        for corr_fn_name in self.corr_fn_list:
+            if not hasattr(stats, corr_fn_name):
+                raise ModuleNotFoundError(f"{corr_fn_name} is an invalid Scipy model.")
 
             # Compute correlation and update 'record' dictionary
-            corr_fn = getattr(stats, corr_model)
+            corr_fn = getattr(stats, corr_fn_name)
             corr_results = corr_fn(df_close[ticker1], df_close[ticker2])
-            record[corr_model] = corr_results.statistic
+            record[corr_fn_name] = corr_results.statistic
 
         return record
 
@@ -183,7 +190,7 @@ class CalCointCorr:
         """
 
         return [
-            ticker for ticker in self.stock_list if self.is_enough(ticker, num_years)
+            ticker for ticker in self.snp500_list if self.is_enough(ticker, num_years)
         ]
 
     def gen_timeseries(

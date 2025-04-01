@@ -44,9 +44,8 @@ class DownloadOHLCV:
             (Default: "./data/stock").
 
     Attributes:
-        url (str):
-            URL to download updated list of S&P500 stocks
-            (Default: "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies").
+        snp500_list (list[str]):
+            List containing S&P500 stocks.
         start_date (str):
             Start date to download daily stock OHLCV data (Default: "2020-01-01").
         end_date (str | None):
@@ -54,14 +53,9 @@ class DownloadOHLCV:
             current date will be used (Default: None).
         batch_size (int):
             Number of tickers to download concurrently (Default: 10).
-        ignore_list (list[str]):
-            List of stocks to ignore due to data inavailbility in yfinance
-            (Default: ["BRK.B", "BF.B", "CTAS"]).
         stock_dir (str):
             Relative path to folder containing stocks OHLCV data
             (Default: "./data/stock").
-        stock_list (list[str]):
-            List containing S&P500 stocks.
         session (CachedLimiterSession):
             Instance of CachedLimiterSession which inherits from CacheMixin,
             LimiterMixin and Session.
@@ -71,20 +65,17 @@ class DownloadOHLCV:
 
     def __init__(
         self,
-        url: str = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
+        snp500_list: list[str],
         start_date: str = "2020-01-01",
         end_date: str | None = None,
         batch_size: int = 10,
-        ignore_list: list[str] = ["BRK.B", "BF.B", "CTAS"],
         stock_dir: str = "./data/stock",
     ) -> None:
-        self.url = url
+        self.snp500_list = snp500_list
         self.start_date = start_date
         self.end_date = end_date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.batch_size = batch_size
-        self.ignore_list = ignore_list
         self.stock_dir = stock_dir
-        self.stock_list = self.gen_stock_list()
         self.session = None
         self.unsuccessful = []
 
@@ -93,7 +84,9 @@ class DownloadOHLCV:
 
         # Determine if existing OHLCV data is the latest
         if self.is_latest():
-            print(f"Latest OHLCV has already been downloaded. No futher action taken!")
+            print(
+                f"\nLatest OHLCV has already been downloaded. No futher action taken!"
+            )
             return
 
         self.download_tickers()
@@ -139,23 +132,10 @@ class DownloadOHLCV:
             backend=SQLiteCache("yfinance.cache"),
         )
 
-    def gen_stock_list(self) -> list[str]:
-        """Generate updated list of S&P500 stocks from given url."""
-
-        # Get DataFrame containing info on S&P500 stocks
-        df_info, _ = pd.read_html(self.url)
-
-        # Remove stocks in 'self.ignore_list' from list of S&P500 stocks
-        return [
-            stock
-            for stock in df_info["Symbol"].to_list()
-            if stock not in self.ignore_list
-        ]
-
     def download_tickers(self, stock_list: list[str] | None = None) -> None:
         """Download about 5 years OHLCV daily data for each S&P500 stocks in batches."""
 
-        stock_list = stock_list or self.stock_list
+        stock_list = stock_list or self.snp500_list
 
         # Create folder if not exist
         utils.create_folder(self.stock_dir)

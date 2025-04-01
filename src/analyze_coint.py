@@ -49,7 +49,7 @@ class AnalyzeCoint:
         self.top_n = top_n
 
     def __call__(self, ticker: str) -> pd.DataFrame:
-        """Determine if top N tickers having lowest conintegrated pvalue with 'ticker'
+        """Determine if top N tickers having lowest cointegrated pvalue with 'ticker'
         are consistent across different dates and periods."""
 
         if not Path(self.coint_dir).is_dir():

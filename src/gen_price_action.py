@@ -30,11 +30,9 @@ import pandas as pd
 import pandas_market_calendars as mcal
 from tqdm import tqdm
 
+from config.variables import COINT_CORR_FN, HF_MODEL
 from src.cal_coint_corr import CalCointCorr
 from src.utils import utils
-
-HF_MODEL = Literal["prosusai", "yiyanghkust", "ziweichen", "aventiq_ai"]
-COINT_CORR_FN = Literal["coint", "pearsonr", "spearmanr", "kendalltau"]
 
 
 class GenPriceAction:
@@ -93,6 +91,7 @@ class GenPriceAction:
         top_n: int = 10,
         stock_dir: str = "./data/stock",
         results_dir: str = "./data/results",
+        coint_corr_dir: str = "./data/coint_corr",
     ) -> None:
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.hf_model = hf_model
@@ -100,10 +99,10 @@ class GenPriceAction:
         self.top_n = top_n
         self.stock_dir = stock_dir
 
-        coint_corr_dir = f"./data/coint_corr/{self.date}"
+        coint_corr_date_dir = f"{coint_corr_dir}/{self.date}"
         results_date_dir = f"{results_dir}/{self.date}"
 
-        self.coint_corr_path = f"{coint_corr_dir}/coint_corr_{period}y.csv"
+        self.coint_corr_path = f"{coint_corr_date_dir}/coint_corr_{period}y.csv"
         self.senti_path = f"{results_date_dir}/sentiment.csv"
         self.price_action_dir = (
             f"{results_date_dir}/{hf_model}_{coint_corr_fn}_{period}/price_actions"
@@ -230,11 +229,6 @@ class GenPriceAction:
         df_ohlcv.index = pd.to_datetime(df_ohlcv.index)
         df.index = pd.to_datetime(df.index)
 
-        if df.index.max() > df_ohlcv.index.max():
-            raise ValueError(
-                f"OHLCV data is only available up to {df_ohlcv.index.max()}"
-            )
-
         # Append closing price of 'ticker'
         df[f"{ticker}_close"] = df_ohlcv.loc[df_ohlcv.index.isin(df.index), "Close"]
 
@@ -266,12 +260,12 @@ class GenPriceAction:
         df = df_av.copy()
 
         # Get list of cointegrated stocks with lowest pvalue
-        coint_list = self.get_topn_tickers(ticker, df_coint_corr)
+        coint_corr_list = self.get_topn_tickers(ticker, df_coint_corr)
 
-        if coint_list is None:
+        if coint_corr_list is None:
             return
 
-        for coint_ticker in coint_list:
+        for coint_ticker in coint_corr_list:
             # Generate and save DataFrame for each cointegrated stock
             df_coint_corr_ticker = self.append_coint_close(
                 df, coint_ticker=coint_ticker
@@ -367,11 +361,6 @@ class GenPriceAction:
         # Ensure both df.index and df_ohlcv are datetime objects
         df.index = pd.to_datetime(df.index)
         df_ohlcv.index = pd.to_datetime(df_ohlcv.index)
-
-        if df.index.max() > df_ohlcv.index.max():
-            raise ValueError(
-                f"OHLCV data is only available up to {df_ohlcv.index.max()}"
-            )
 
         # Append closing price of 'ticker'
         df[f"{coint_ticker}_close"] = df_ohlcv.loc[

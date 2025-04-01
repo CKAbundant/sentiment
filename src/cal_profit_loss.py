@@ -26,6 +26,7 @@ import pandas as pd
 from pydantic import BaseModel, Field, computed_field, field_validator
 from tqdm import tqdm
 
+from config.variables import COINT_CORR_FN, HF_MODEL
 from src.utils import utils
 
 
@@ -101,13 +102,16 @@ class CalProfitLoss:
     Args:
         date (str):
             If provided, date when cointegration is performed.
+        hf_model (str):
+            Name of FinBERT model in HuggingFace (Default: "ziweichen").
+        coint_corr_fn (COINT_CORR_FN):
+            Name of function to perform either cointegration or correlation
+            (Default: "coint").
+        period (int):
+            Time period used to compute cointegration (Default: 5).
         results_dir (str):
             Relative path of folder containing price action for ticker pairs (i.e.
             stock ticker and its cointegrated ticker) (Default: "./data/results").
-        model_name (str):
-            Name of FinBERT model in Huggi[ngFace (Default: "ziweichen").
-        period (int):
-            Time period used to compute cointegration (Default: 5).
 
     Attributes:
         date (str):
@@ -129,16 +133,19 @@ class CalProfitLoss:
     def __init__(
         self,
         date: str | None = None,
-        results_dir: str = "./data/results",
-        model_name: str = "ziweichen",
+        hf_model: HF_MODEL = "ziweichen",
+        coint_corr_fn: COINT_CORR_FN = "coint",
         period: int = 5,
+        results_dir: str = "./data/results",
     ) -> None:
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
-        self.model_dir = f"{results_dir}/{self.date}/{model_name}_{period}"
-        self.price_action_dir = f"{self.model_dir}/price_actions"
         self.open_trades = []
         self.num_open = 0
         self.no_trades = []
+        self.model_dir = (
+            f"{results_dir}/{self.date}/{hf_model}_{coint_corr_fn}_{period}"
+        )
+        self.price_action_dir = f"{self.model_dir}/price_actions"
 
     def run(self) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame] | None:
         """Generate and saved completed trades and summary statistics as
@@ -170,6 +177,7 @@ class CalProfitLoss:
         # List to store DataFrames containing completed trades info
         results_list = []
 
+        # Iterate through all csv files in 'price_action_dir'
         for file_path in tqdm(Path(self.price_action_dir).rglob("*.csv")):
             # Load price action csv file
             df = utils.load_csv(file_path)
