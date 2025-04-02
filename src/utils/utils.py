@@ -1,19 +1,35 @@
 """Generic helper functions"""
 
+import pickle
 import random
 from collections import Counter, defaultdict
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 
-def get_current_dt(fmt: str = "%Y%m%d_%H%M", tz: str = "America/New_York") -> str:
-    """Return current datetimeas string with 'specific' format."""
+def get_current_dt(fmt: str = "%Y%m%d_%H%M") -> str:
+    """Return current datetime as string with 'specific' format."""
 
     return datetime.now().strftime(fmt)
+
+
+def save_pickle(dictionary: dict[str, Any], file_path: str) -> None:
+    """Save dictionary as pickle object."""
+
+    with open(file_path, "wb") as file:
+        pickle.dump(dictionary, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def load_pickle(file_path: str) -> dict[str, Any]:
+    """Load dictionary from pickle file."""
+
+    with open(file_path, "rb") as file:
+        return pickle.load(file)
 
 
 def save_html(html_content: str, file_name: str, data_dir: str = "./data/html") -> None:

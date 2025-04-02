@@ -57,14 +57,15 @@ class GenData:
             "GOOGL", "META", "TSLA", "JPM", "JNJ", "V", "XOM", "UNH", "WMT", "PG",
             "HD", "NFLX", "CRM", "BAC", "BA"]).
         max_scrolls (int):
-            Maximum number of scrolls to extract news article from Yahoo Finance (Default: 20).
+            Maximum number of scrolls to extract news article from Yahoo Finance
+            (Default: 20).
         model_list (list[str]):
             List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
             "yiyanghkust/finbert-tone", "ZiweiChen/FinBERT-FOMC",
             "AventIQ-AI/finbert-sentiment-analysis"]).
         results_dir (str):
-            Relative path of folder containing price action for ticker pairs (i.e.
-            stock ticker and its cointegrated ticker) (Default: "./data/results").
+            Relative path of folder containing all sentiment, price actions and
+            trade results (Default: "./data/results").
 
     Attributes:
         date (str):
@@ -82,9 +83,8 @@ class GenData:
             List of Hugging Face FinBERT models (Default: ["ProsusAI/finbert",
             "yiyanghkust/finbert-tone", "ZiweiChen/FinBERT-FOMC",
             "AventIQ-AI/finbert-sentiment-analysis"]).
-        results_dir (str):
-            Relative path of folder containing price action for ticker pairs (i.e.
-            stock ticker and its cointegrated ticker) (Default: "./data/results").
+        results_date_dir (str):
+            Relative path of folder containing subfolders for different strategies.
     """
 
     def __init__(
@@ -126,7 +126,7 @@ class GenData:
         self.stock_list = stock_list
         self.max_scrolls = max_scrolls
         self.model_list = model_list
-        self.results_dir = results_dir
+        self.results_date_dir = f"{results_dir}/{self.date}"
 
     def run(self) -> pd.DataFrame:
         """Generate DataFrame containing news extracted from Yahoo Finance; and
@@ -135,8 +135,8 @@ class GenData:
         df_list = []
 
         # Create 'results' folder if not exist
-        if not Path(self.results_dir).is_dir():
-            utils.create_folder(self.results_dir)
+        if not Path(self.results_date_dir).is_dir():
+            utils.create_folder(self.results_date_dir)
 
         for ticker in self.stock_list:
             print(f"\nticker : {ticker}")
@@ -159,11 +159,11 @@ class GenData:
         # Combine list of DataFrames row-wise and Append sentiment scores
         # for different rater. Save DataFrame as csv file
         df_combine = pd.concat(df_list, axis=0).reset_index(drop=True)
-        df_combine.to_csv(f"{self.results_dir}/{self.date}/news.csv", index=False)
+        df_combine.to_csv(f"{self.results_date_dir}/news.csv", index=False)
 
         # Append sentiment scores for various FinBERT models
         df_combine = self.append_sentiment_scores(df_combine)
-        df_combine.to_csv(f"{self.results_dir}/{self.date}/sentiment.csv", index=False)
+        df_combine.to_csv(f"{self.results_date_dir}/sentiment.csv", index=False)
 
         return df_combine
 
