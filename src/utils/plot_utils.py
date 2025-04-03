@@ -96,3 +96,21 @@ def gen_special_counter(text: str) -> Counter:
     ]
 
     return Counter(special_list)
+
+
+def get_top_n(df: pd.DataFrame, col: str, top_n: int) -> pd.Series:
+    """Return top N items for selected column in DataFrame as Panda Series.
+
+    Args:
+        data (pd.DataFrame): DataFrame of concern.
+        col (str): Column in DataFrame to perform 'value_count.
+        top_n (int): Top N unique item in selected column by frequency.
+
+    Returns:
+        (pd.Series): Sorted value count by 'top_n'.
+    """
+
+    # Get frequency of unique items and filter top N by frequency
+    value_count = df[col].value_counts()
+
+    return value_count.head(top_n)

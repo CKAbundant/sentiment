@@ -19,6 +19,7 @@ from src.gen_data import GenData
 from src.gen_price_action import GenPriceAction
 from src.plot_coint_corr import PlotCointCorr
 from src.plot_news import PlotNews
+from src.plot_strategies import PlotStrategies
 from src.utils import main_utils
 
 
@@ -48,21 +49,18 @@ def main() -> None:
     # cal_coint_corr = CalCointCorr(snp500_list=snp500_list, date=date)
     # cal_coint_corr.run()
 
-    # Test out different strategies
-    main_utils.run_strategies(date)
-
-    # Perform analysis on different strategies
-
-    # print(f"df_results : \n\n{pformat(df_results)}\n")
-    # print(f"df_overall : \n\n{pformat(df_overall)}\n")
-    # print(f"df_breakdown : \n\n{pformat(df_breakdown)}\n")
-    # print(f"df_top_ret_pairs : \n\n{pformat(df_top_ret_pairs)}\n")
+    # # Test out different strategies
+    # main_utils.run_strategies(date)
 
     # plot_news = PlotNews(date=date)
     # plot_news.run()
 
-    plot_coint_corr = PlotCointCorr(date=date)
-    plot_coint_corr.run()
+    # plot_coint_corr = PlotCointCorr(date=date)
+    # plot_coint_corr.run()
+
+    # Perform analysis on different strategies
+    plot_strategies = PlotStrategies()
+    plot_strategies.run()
 
 
 if __name__ == "__main__":

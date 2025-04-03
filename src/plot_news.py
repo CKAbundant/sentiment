@@ -234,21 +234,19 @@ class PlotNews:
 
         df = df_news.copy()
 
-        # Get counts for each publisher
-        publisher_count = df["publisher"].value_counts()
-
-        # Filter top N from Pandas Series 'publisher_count'
-        top_n = publisher_count.head(top_n)
+        # Get top N publisher with highest count
+        top_n_publisher = plot_utils.get_top_n(df, "publisher", top_n)
 
         fig, ax = plt.subplots(figsize=(15, 8))
-        sns.barplot(x=top_n.index, y=top_n, ax=ax)
-
-        # Create folder if not exist
-        utils.create_folder(self.graph_date_dir)
+        sns.barplot(x=top_n_publisher.index, y=top_n_publisher, ax=ax)
 
         ax.set_title("Publisher Distribution")
         ax.set_xlabel("Publisher")
         ax.set_ylabel("Counts")
+
+        # Create folder if not exist
+        utils.create_folder(self.graph_date_dir)
+
         fig.autofmt_xdate()
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/publisher.png")
