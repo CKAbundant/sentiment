@@ -46,7 +46,7 @@ class PlotStrategies:
             (Default: ["hf_model", "coint_corr_fn", "period"].
         analysis_cols (list[str]):
             List of columns required for analysis
-            (Default: ["annualized_return", "win_rate", "mean_days_held", "trading_period"]).
+            (Default: ["annualized_return", "win_rate", "min_days_held", "max_days_held", "mean_days_held", "total_num_trades"]).
         top_n (int):
             Top N ticker pair with highest daily return (Default: 15).
         results_dir (str):
@@ -72,7 +72,7 @@ class PlotStrategies:
             (Default: ["hf_model", "coint_corr_fn", "period"].
         analysis_cols (list[str]):
             List of columns required for analysis
-            (Default: ["annualized_return", "win_rate", "mean_days_held", "trading_period"]).
+            (Default: ["annualized_return", "win_rate", "max_days_held", "median_days_held", "mean_days_held", "total_num_trades"]).
         top_n (int):
             Top N ticker pair with highest daily return (Default: 15).
         results_date_dir (str):
@@ -94,8 +94,10 @@ class PlotStrategies:
         analysis_cols: list[str] = [
             "annualized_return",
             "win_rate",
+            "total_num_trades",
+            "total_investment",
+            "max_days_held",
             "mean_days_held",
-            "trading_period",
         ],
         top_n: int = 15,
         results_dir: str = "./data/results/",
@@ -120,19 +122,19 @@ class PlotStrategies:
         # positive annualized return
         df_top_n, df_pivot_top_n = self.gen_top_n_pairs()
 
-        # Plot histograms of annualized returns for all combinations, all FinBERT,
-        # all cointegration/correlation and all time period
+        # # Plot histograms of annualized returns for all combinations, all FinBERT,
+        # # all cointegration/correlation and all time period
         # self.plot_all(df_combined)
         # self.plot_drill_down(df_combined, "hf_model")
         # self.plot_drill_down(df_combined, "coint_corr_fn")
         # self.plot_drill_down(df_combined, "period")
 
-        # # Plot bar chart of common occurring ticker pairs among top_N pairs
-        # self.plot_top_n(df_top_n)
+        # Plot bar chart of common occurring ticker pairs among top_N pairs
+        self.plot_top_n(df_top_n)
 
-        # # Plot bar chart of common occuring ticker pairs in increasing top N
-        # # i.e. start from top 1 till top N
-        # self.plot_successive_top_n(df_pivot_top_n)
+        # Plot bar chart of common occuring ticker pairs in increasing top N
+        # i.e. start from top 1 till top N
+        self.plot_successive_top_n(df_pivot_top_n)
 
         return df_combined, df_top_n, df_pivot_top_n
 
@@ -142,7 +144,7 @@ class PlotStrategies:
 
         df = df_combined.copy()
 
-        _, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 15))
+        _, axes = plt.subplots(nrows=3, ncols=2, figsize=(20, 15))
 
         for ax, col in zip(axes.flat, self.analysis_cols):
             sns.histplot(data=df, x=col, ax=ax, kde=True, bins=10)
@@ -179,11 +181,11 @@ class PlotStrategies:
 
         df = df_combined.copy()
 
-        fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 15))
+        fig, axes = plt.subplots(nrows=3, ncols=2, figsize=(20, 15))
 
         for ax, col in zip(axes.flat, self.analysis_cols):
             sns.histplot(
-                data=df, x=col, hue=drill_down, ax=ax, kde=True, legend=True, alpha=0.5
+                data=df, x=col, hue=drill_down, ax=ax, kde=True, legend=True, alpha=0.3
             )
 
             # Format text for graphical representation
@@ -221,14 +223,16 @@ class PlotStrategies:
         # Get top N 'ticker_pair' with highest count
         top_n_pairs = plot_utils.get_top_n(df, col, top_n)
 
-        fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(20, 8))
+        fig, ax = plt.subplots(figsize=(20, 8))
 
         # Plot bar chart of top N ticker_pair
         sns.barplot(x=top_n_pairs.index, y=top_n_pairs, ax=ax)
 
-        ax.set_title(f"Top {top_n} Ticker Pair by Frequency")
-        ax.set_xlabel("Ticker Pair")
-        ax.set_ylabel("Counts")
+        ax.set_title(f"Top {top_n} Ticker Pair by Frequency", fontsize=18)
+        ax.set_xlabel("Ticker Pair", fontsize=14)
+        ax.set_ylabel("Counts", fontsize=14)
+        ax.tick_params(axis="x", labelsize=14)
+        ax.tick_params(axis="y", labelsize=14)
 
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
@@ -256,16 +260,17 @@ class PlotStrategies:
             sns.barplot(x=df_pair_counts.index, y=df_pair_counts["count"], ax=ax)
 
             ax.set_title(
-                f"Top {display_num} Common Ticker-Pairs Extracted from Top {top_n} "
-                "Ticker-Pairs with highest Daily Return."
+                f"Top {display_num} Common Ticker-Pairs Extracted from Top {idx+1} "
+                "Ticker-Pairs",
+                fontsize=14,
             )
-            ax.set_xlabel("Ticker-Pair")
-            ax.set_ylabel("Counts")
+            ax.set_xlabel("Ticker-Pair", fontsize=14)
+            ax.set_ylabel("Counts", fontsize=14)
+            ax.tick_params(axis="x", rotation=30, labelsize=14)
 
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
 
-        fig.autofmt_xdate()
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/successive_top_n_pairs.png")
 
@@ -312,6 +317,12 @@ class PlotStrategies:
         """Combine DataFrame generated from 'overall_summary.csv' for all
         combinations."""
 
+        combined_path = Path(f"{self.results_date_dir}/combined_overall.csv")
+
+        if combined_path.is_file():
+            print(f"{combined_path.name} exists at '{combined_path.as_posix()}'")
+            return utils.load_csv(combined_path)
+
         # Get FinBERT models, cointegration/correlation functions and time periods
         hf_models = get_args(HF_MODEL)
         coint_corr_fns = get_args(COINT_CORR_FN)
@@ -331,7 +342,7 @@ class PlotStrategies:
 
         # Concatenate row-wise and save DataFrame
         df_combined = pd.concat(df_list, axis=0).reset_index(drop=True)
-        utils.save_csv(df_combined, f"{self.results_date_dir}/combined_overall.csv")
+        utils.save_csv(df_combined, combined_path)
 
         return df_combined
 
@@ -352,6 +363,19 @@ class PlotStrategies:
             df_pivot (pd.DataFrame):
                 Pivoted DataFrame where columns are top N tickers.
         """
+
+        top_n_path = Path(f"{self.results_date_dir}/top_{top_n}_tickers.csv")
+        pivot_top_n_path = Path(
+            f"{self.results_date_dir}/pivot_top_{top_n}_tickers.csv"
+        )
+
+        if top_n_path.is_file() and pivot_top_n_path.is_file():
+            print(f"{top_n_path.name} exists at '{top_n_path.as_posix()}'")
+            print(f"{pivot_top_n_path.name} exists at '{pivot_top_n_path.as_posix()}'")
+
+            return utils.load_csv(top_n_path), utils.load_csv(
+                pivot_top_n_path, index_col=[0]
+            )
 
         top_n = top_n or self.top_n
 
@@ -382,9 +406,11 @@ class PlotStrategies:
         utils.save_csv(df_top_n, f"{self.results_date_dir}/top_{top_n}_tickers.csv")
 
         # Generate pivot table where columns are top N tickers
-        df_pivot_top_n = pd.concat(df_pivot_list, axis=0).reset_index()
+        df_pivot_top_n = pd.concat(df_pivot_list, axis=0)
         utils.save_csv(
-            df_pivot_top_n, f"{self.results_date_dir}/pivot_top_{top_n}_tickers.csv"
+            df_pivot_top_n,
+            f"{self.results_date_dir}/pivot_top_{top_n}_tickers.csv",
+            save_index=True,
         )
 
         return df_top_n, df_pivot_top_n

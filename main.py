@@ -59,7 +59,7 @@ def main() -> None:
     # plot_coint_corr.run()
 
     # Perform analysis on different strategies
-    plot_strategies = PlotStrategies()
+    plot_strategies = PlotStrategies(date=date)
     plot_strategies.run()
 
 

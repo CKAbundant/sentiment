@@ -71,15 +71,15 @@ class PlotNews:
         # Load 'news.csv' as DataFrame
         df_news = pd.read_csv(self.news_path)
 
-        self.plot_date(df_news, value_name="date")
-        self.plot_time(
-            df_news,
-            value_name="time",
-            value_vars=["min_minutes", "max_minutes"],
-        )
-        self.plot_publisher(df_news)
-        self.plot_word_count(df_news)
-        self.plot_top_n(df_news)
+        # self.plot_date(df_news, value_name="date")
+        # self.plot_time(
+        #     df_news,
+        #     value_name="time",
+        #     value_vars=["min_minutes", "max_minutes"],
+        # )
+        # self.plot_publisher(df_news)
+        # self.plot_word_count(df_news)
+        self.plot_top_n(df_news, top_n=30)
 
     def plot_date(
         self,
@@ -292,15 +292,20 @@ class PlotNews:
 
         for component, news_dict in df_dict.items():
             for news_type, df_count in news_dict.items():
-                fig, ax = plt.subplots(figsize=(20, 5))
+                fig, ax = plt.subplots(figsize=(20, 4))
                 sns.barplot(x=df_count.index, y=df_count["count"], ax=ax)
 
-                ax.set_title(f"Top {top_n} '{component}' for News {news_type.title()}")
-                ax.set_xlabel(component)
-                ax.set_ylabel("Counts")
+                ax.set_title(
+                    f"Top {top_n} '{component}' for News {news_type.title()}",
+                    fontsize=18,
+                )
+                ax.set_xlabel(component, fontsize=14)
+                ax.set_ylabel("Counts", fontsize=14)
+                ax.tick_params(axis="x", labelsize=14)
+                ax.tick_params(axis="y", labelsize=14)
 
                 if component == "word":
-                    ax.tick_params(axis="x", labelrotation=30)
+                    ax.tick_params(axis="x", labelrotation=30, labelsize=12)
 
                 plt.tight_layout()
                 plt.savefig(
