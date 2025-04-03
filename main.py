@@ -20,6 +20,7 @@ from src.cal_profit_loss import CalProfitLoss
 from src.download_ohlcv import DownloadOHLCV
 from src.gen_data import GenData
 from src.gen_price_action import GenPriceAction
+from src.plot_coint_corr import PlotCointCorr
 from src.plot_news import PlotNews
 from src.utils import utils
 
@@ -71,8 +72,11 @@ def main() -> None:
     # print(f"df_breakdown : \n\n{pformat(df_breakdown)}\n")
     # print(f"df_top_ret_pairs : \n\n{pformat(df_top_ret_pairs)}\n")
 
-    plot_news = PlotNews(date=date)
-    plot_news.run()
+    # plot_news = PlotNews(date=date)
+    # plot_news.run()
+
+    plot_coint_corr = PlotCointCorr(date=date)
+    plot_coint_corr.run()
 
 
 def parse_arguments() -> Namespace:

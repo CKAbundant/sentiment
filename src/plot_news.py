@@ -1,4 +1,4 @@
-"""Plot graphs relating to news web-scrapped from yfinance:
+"""Class to plot graphs relating to news web-scrapped from yfinance:
 
 1. Publication Date Distribution by ticker
 2. Publication time Distribution by ticker
@@ -8,13 +8,10 @@
 6. Special Characters Distribution by news title, news content and combined
 """
 
-import pickle
-import re
 from collections import Counter, defaultdict
 from datetime import timedelta
 from typing import get_args
 
-import matplotlib.font_manager as fm
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
@@ -33,14 +30,8 @@ class PlotNews:
     Args:
         date (str):
             If provided, date when news are scraped.
-        hf_model (HF_MODEL):
-            Name of FinBERT model in Huggi[ngFace (Default: "ziweichen").
-        coint_corr_fn (COINT_CORR_FN):
-            Name of function to perform either cointegration or correlation.
-        period (int):
-            Time period used to compute cointegration (Default: 5).
         results_dir (str):
-            Relative path of folder containing news (Default: "./data/results)
+            Relative path of folder containing news (Default: "./data/results).
         graph_dir (str):
             Relative path of folder containing graphs (Default: "./data/graph").
 
