@@ -337,6 +337,7 @@ class CalProfitLoss:
         )
 
         overall = {
+            "strategy": Path(self.model_dir).name,
             "total_num_stock_tickers": total_num_tickers,
             "num_tickers_with_no_trades": num_tickers_with_no_trades,
             "stock_ticker_without_trades": ", ".join(no_trades),
