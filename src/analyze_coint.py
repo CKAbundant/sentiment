@@ -41,19 +41,19 @@ class AnalyzeCoint:
 
     def __init__(
         self,
-        coint_dir: str = "./data/coint",
+        coint_corr_dir: str = "./data/coint_corr",
         top_n: int = 20,
     ) -> None:
-        self.coint_dir = coint_dir
-        self.coint_paths = sorted(list(Path(self.coint_dir).rglob("*.csv")))
+        self.coint_corr_dir = coint_corr_dir
+        self.coint_paths = sorted(list(Path(self.coint_corr_dir).rglob("*.csv")))
         self.top_n = top_n
 
     def __call__(self, ticker: str) -> pd.DataFrame:
         """Determine if top N tickers having lowest cointegrated pvalue with 'ticker'
         are consistent across different dates and periods."""
 
-        if not Path(self.coint_dir).is_dir():
-            raise FileExistsError(f"'{self.coint_dir}' does not exist!")
+        if not Path(self.coint_corr_dir).is_dir():
+            raise FileExistsError(f"'{self.coint_corr_dir}' does not exist!")
 
         records = []
 

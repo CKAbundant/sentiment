@@ -46,7 +46,7 @@ class PlotStrategies:
             (Default: ["hf_model", "coint_corr_fn", "period"].
         analysis_cols (list[str]):
             List of columns required for analysis
-            (Default: ["annualized_return", "win_rate", "min_days_held", "max_days_held", "mean_days_held", "total_num_trades"]).
+            (Default: ["annualized_return", "win_rate", "total_num_trades, "total_investment"]).
         top_n (int):
             Top N ticker pair with highest daily return (Default: 15).
         results_dir (str):
@@ -72,7 +72,7 @@ class PlotStrategies:
             (Default: ["hf_model", "coint_corr_fn", "period"].
         analysis_cols (list[str]):
             List of columns required for analysis
-            (Default: ["annualized_return", "win_rate", "max_days_held", "median_days_held", "mean_days_held", "total_num_trades"]).
+            (Default: ["annualized_return", "win_rate", "total_num_trades, "total_investment"]).
         top_n (int):
             Top N ticker pair with highest daily return (Default: 15).
         results_date_dir (str):
@@ -96,8 +96,6 @@ class PlotStrategies:
             "win_rate",
             "total_num_trades",
             "total_investment",
-            "max_days_held",
-            "mean_days_held",
         ],
         top_n: int = 15,
         results_dir: str = "./data/results/",
@@ -115,12 +113,12 @@ class PlotStrategies:
         self.graph_date_dir = f"{graph_dir}/{self.date}"
 
     def run(self) -> None:
-        # Combine 'overall_summary.csv' info for all combinations
-        df_combined = self.combine_overall()
+        # # Combine 'overall_summary.csv' info for all combinations
+        # df_combined = self.combine_overall()
 
-        # Generate DataFrame containing top 15 ticker pairs with highest
-        # positive annualized return
-        df_top_n, df_pivot_top_n = self.gen_top_n_pairs()
+        # # Generate DataFrame containing top 15 ticker pairs with highest
+        # # positive annualized return
+        # df_top_n, df_pivot_top_n = self.gen_top_n_pairs()
 
         # # Plot histograms of annualized returns for all combinations, all FinBERT,
         # # all cointegration/correlation and all time period
@@ -129,14 +127,21 @@ class PlotStrategies:
         # self.plot_drill_down(df_combined, "coint_corr_fn")
         # self.plot_drill_down(df_combined, "period")
 
-        # Plot bar chart of common occurring ticker pairs among top_N pairs
-        self.plot_top_n(df_top_n)
+        # Plot top N tickers with highest daily return overall and for different
+        # strategy component
+        self.plot_top_all()
 
-        # Plot bar chart of common occuring ticker pairs in increasing top N
-        # i.e. start from top 1 till top N
-        self.plot_successive_top_n(df_pivot_top_n)
+        for strat_comp in self.strategy_subcols:
+            self.plot_top_strat_comp(strat_comp)
 
-        return df_combined, df_top_n, df_pivot_top_n
+        # # Plot bar chart of common occurring ticker pairs among top_N pairs
+        # self.plot_common(df_top_n)
+
+        # # Plot bar chart of common occuring ticker pairs in increasing top N
+        # # i.e. start from top 1 till top N
+        # self.plot_successive_common(df_pivot_top_n)
+
+        # return df_combined, df_top_n, df_pivot_top_n
 
     def plot_all(self, df_combined: pd.DataFrame) -> None:
         """Plot histogram of annualized returns, mean days held, trading period,
@@ -208,7 +213,49 @@ class PlotStrategies:
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/combined_{drill_down}.png")
 
-    def plot_top_n(
+    def plot_top_all(self, top_n: int = 15) -> None:
+        """Plot top N ticker pairs with overall highest daily return."""
+
+        df_dict = self.get_top_pairs("all")
+        df = df_dict["all"]
+
+        fig, ax = plt.subplots(figsize=(15, 8))
+        sns.barplot(x=df["ticker_pair"], y=df["overall_daily_ret"], ax=ax)
+
+        ax.set_title(f"Top {top_n} Ticker Pairs with Highest Daily Return", fontsize=24)
+        ax.set_xlabel("Ticker Pair", fontsize=14)
+        ax.set_ylabel("Daily Returns", fontsize=14)
+        ax.tick_params(axis="x", rotation=30, labelsize=14)
+
+        # Create folder if not exist
+        utils.create_folder(self.graph_date_dir)
+
+        plt.tight_layout()
+        plt.savefig(f"{self.graph_date_dir}/top_{top_n}_all.png")
+
+    def plot_top_strat_comp(self, strat_comp: str, top_n: int = 15) -> None:
+        """Plot top ticker pairs with highest daily return for strategy component
+        (i.e. 'hf_model', 'coint_corr_fn' and 'period')."""
+
+        df_dict = self.get_top_pairs(strat_comp)
+
+        fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 12))
+
+        for ax, (comp, df) in zip(axes.flat, df_dict.items()):
+            sns.barplot(x=df["ticker_pair"], y=df["overall_daily_ret"], ax=ax)
+
+            ax.set_title(f"Top {top_n} Ticker Pairs for '{comp}'", fontsize=18)
+            ax.set_xlabel("Ticker Pair", fontsize=14)
+            ax.set_ylabel("Daily Returns", fontsize=14)
+            ax.tick_params(axis="x", rotation=30, labelsize=14)
+
+        # Create folder if not exist
+        utils.create_folder(self.graph_date_dir)
+
+        plt.tight_layout()
+        plt.savefig(f"{self.graph_date_dir}/top_{top_n}_{strat_comp}.png")
+
+    def plot_common(
         self,
         df_top_n: pd.DataFrame,
         col: str = "ticker_pair",
@@ -241,7 +288,7 @@ class PlotStrategies:
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/top_n_pairs.png")
 
-    def plot_successive_top_n(
+    def plot_successive_common(
         self,
         df_pivot_top_n: pd.DataFrame,
         top_n: int | None = None,
@@ -543,3 +590,62 @@ class PlotStrategies:
                 )
 
         return df
+
+    def get_top_pairs(
+        self,
+        strat_comp: str,
+        top_n: int = 15,
+    ) -> dict[str, pd.DataFrame]:
+        """Get top 'top_n' ticker pairs for DataFrame loaded from 'top_15_tickers.csv'.
+
+        Args:
+            strat_comp (str):
+                Either "hf_model", "coint_corr_fn", "period" or "all".
+            top_n (int):
+                Top N ticker pairs with highest daily returns extracted from DataFrame.
+
+        Returns:
+            (dict[str, np.ndarray]):
+                Dictionary mapping strategy component to top N ticker pairs.
+        """
+
+        top_tickers_path = Path(f"{self.results_date_dir}/top_{top_n}_tickers.csv")
+
+        if not top_tickers_path.is_file():
+            raise FileNotFoundError(
+                f"{top_tickers_path.name} is not present in '{top_tickers_path.as_posix()}'."
+            )
+
+        df = utils.load_csv(top_tickers_path)
+
+        # Append "hf_model", "coint_corr_fn", "period" columns
+        df[["hf_model", "coint_corr_fn", "period"]] = df["strategy"].str.rsplit(
+            "_", n=2, expand=True
+        )
+
+        if strat_comp == "all":
+            df = df.loc[:, ["ticker_pair", "overall_daily_ret", "trading_period"]]
+            df = df.sort_values(by="overall_daily_ret", ascending=False)
+            df = df.drop_duplicates(subset="ticker_pair")
+
+            return {"all": df.head(top_n).reset_index(drop=True)}
+
+        return self.get_top_pairs_by_comp(df, strat_comp, top_n)
+
+    def get_top_pairs_by_comp(
+        self, data: pd.DataFrame, strat_comp: str, top_n: int
+    ) -> dict[str, pd.DataFrame]:
+        """Get top ticker pairs for each strategy component e.g. 'hf_model'."""
+
+        df = data.copy()
+
+        pairs_dict = {}
+        for comp in df[strat_comp].unique():
+            df_filter = df.loc[
+                df[strat_comp] == comp, ["ticker_pair", "overall_daily_ret"]
+            ]
+            df_filter = df_filter.sort_values(by="overall_daily_ret", ascending=False)
+            df_filter = df_filter.drop_duplicates(subset="ticker_pair")
+            pairs_dict[comp] = df_filter.head(top_n).reset_index(drop=True)
+
+        return pairs_dict
