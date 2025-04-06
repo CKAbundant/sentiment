@@ -6,10 +6,12 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Type, get_args
 
 import numpy as np
 import pandas as pd
+
+from config.variables import EntryType
 
 
 def get_current_dt(fmt: str = "%Y%m%d_%H%M") -> str:
@@ -317,3 +319,16 @@ def display_divergent_rating(
     return df_divergent.style.set_properties(
         subset=["title", "content"], **{"width": "500px", "white-space": "normal"}
     )
+
+
+def validate_literal(var: str, literal: Type[Literal], literal_name: str) -> str:
+    """Ensure the variable meets the requirement of literal type"""
+
+    var = var.lower()
+
+    if var not in [item.lower for item in get_args(literal)]:
+        raise ValueError(
+            f"'{var}' is not valid item for '{literal_name}' Literal type."
+        )
+
+    return var

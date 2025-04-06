@@ -40,8 +40,8 @@ class GenPriceAction:
     specific date, model, period, and correlation/cointegration combination.
 
     Usage:
-        >>> gen_price_action = GenPriceAction()
-        >>> df = gen_price_action.run()
+        >>> gen_pa = GenPriceAction()
+        >>> df = gen_pa.run()
 
     Args:
         date (str):
