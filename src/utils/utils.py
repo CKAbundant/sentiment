@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Literal, Type, get_args
+from typing import Any, Literal, get_args
 
 import numpy as np
 import pandas as pd
@@ -321,7 +321,7 @@ def display_divergent_rating(
     )
 
 
-def validate_literal(var: str, literal: Type[Literal], literal_name: str) -> str:
+def validate_literal(var: str, literal: Literal, literal_name: str) -> str:
     """Ensure the variable meets the requirement of literal type"""
 
     var = var.lower()

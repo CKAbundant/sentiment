@@ -34,6 +34,22 @@ def parse_arguments() -> Namespace:
         help="Skip web scraping and sentiment analysis.",
     )
 
+    # Add '--strategy' flag
+    parser.add_argument(
+        "--strategy",
+        type=str,
+        default="Senti",
+        help="Name of entry signal strategy (Default: 'Senti')",
+    )
+
+    # Add '--trade' flag
+    parser.add_argument(
+        "--trade",
+        type=str,
+        default="multiple_entry",
+        help="Name of  (Default: 'multiple_entry')",
+    )
+
     return parser.parse_args()
 
 

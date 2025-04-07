@@ -20,7 +20,7 @@ from src.gen_price_action import GenPriceAction
 from src.plot_coint_corr import PlotCointCorr
 from src.plot_news import PlotNews
 from src.plot_strategies import PlotStrategies
-from src.utils import main_utils
+from src.utils import main_utils, utils
 
 
 def main() -> None:
@@ -29,10 +29,13 @@ def main() -> None:
     # Get arguments from command line
     args = main_utils.parse_arguments()
     date = args.date
+    strategy = args.strategy
     no_sentiment = args.no_sentiment
 
-    # # Generate list of S&P500 stocks
-    # snp500_list = utils.gen_snp500_list(URL, IGNORE_LIST)
+    print(f"date : {date}")
+
+    # Generate list of S&P500 stocks
+    snp500_list = utils.gen_snp500_list(URL, IGNORE_LIST)
 
     # if not no_sentiment:
     #     # Generate DataFrame containing news and sentiment scores for different
@@ -58,9 +61,9 @@ def main() -> None:
     # plot_coint_corr = PlotCointCorr(date=date)
     # plot_coint_corr.run()
 
-    # Perform analysis on different strategies
-    plot_strategies = PlotStrategies(date=date)
-    plot_strategies.run()
+    # # Perform analysis on different strategies
+    # plot_strategies = PlotStrategies(date=date)
+    # plot_strategies.run()
 
 
 if __name__ == "__main__":

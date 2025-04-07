@@ -26,9 +26,8 @@ class DownloadOHLCV:
         >>> download_ohlcv.run()
 
     Args:
-        url (str):
-            URL to download updated list of S&P500 stocks
-            (Default: "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies").
+        snp500_list (list[str]):
+            List containing S&P500 stocks.
         start_date (str):
             Start date to download daily stock OHLCV data (Default: "2020-01-01").
         end_date (str):
@@ -106,14 +105,19 @@ class DownloadOHLCV:
 
         latest_dates = []
         for ticker in ["AAPL", "WMT", "JPM"]:
-            df = pd.read_parquet(f"{self.stock_dir}/{ticker}.parquet")
+            file_path = Path(f"{self.stock_dir}/{ticker}.parquet")
+
+            if not file_path.is_file():
+                return False
+
+            df = pd.read_parquet(file_path)
 
             # Get latest date
             latest_date = datetime.strftime(df.index.max(), format="%Y-%m-%d")
             latest_dates.append(latest_date)
 
         # Get first item from sorted 'latest_dates'
-        last_date = sorted("latest_dates", reverse=False)[0]
+        last_date = sorted(latest_dates, reverse=False)[0]
 
         return last_date >= self.end_date
 

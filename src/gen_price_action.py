@@ -128,7 +128,7 @@ class GenPriceAction:
             # Append 'is_holiday', 'ticker' and 'weekday'
             df_av = self.append_is_holiday(df_av)
             df_av = self.append_dayname(df_av)
-            df_av.insert(0, "ticker", [ticker] * len(df_av))
+            df_av.insert(0, "ticker", [ticker])
 
             # Append closing price of ticker
             df_av = self.append_close(df_av, ticker)
@@ -267,7 +267,7 @@ class GenPriceAction:
 
         for coint_ticker in coint_corr_list:
             # Generate and save DataFrame for each cointegrated stock
-            df_coint_corr_ticker = self.append_coint_close(
+            df_coint_corr_ticker = self.append_coint_corr_close(
                 df, coint_ticker=coint_ticker
             )
 
@@ -347,24 +347,24 @@ class GenPriceAction:
         # Convert set to sorted list excluding 'ticker'
         return [symb for symb in sorted(list(coint_set)) if symb != ticker]
 
-    def append_coint_close(
-        self, df_av: pd.DataFrame, coint_ticker: str
+    def append_coint_corr_ohlc(
+        self, df_av: pd.DataFrame, coint_corr_ticker: str
     ) -> pd.DataFrame:
-        """Append closing price of cointegrated stocks."""
+        """Append OHLC data of cointegrated stocks."""
 
         df = df_av.copy()
 
         # Load OHLCV prices for ticker
-        ohlcv_path = f"{self.stock_dir}/{coint_ticker}.parquet"
+        ohlcv_path = f"{self.stock_dir}/{coint_corr_ticker}.parquet"
         df_ohlcv = pd.read_parquet(ohlcv_path)
 
         # Ensure both df.index and df_ohlcv are datetime objects
         df.index = pd.to_datetime(df.index)
         df_ohlcv.index = pd.to_datetime(df_ohlcv.index)
 
-        # Append closing price of 'ticker'
-        df[f"{coint_ticker}_close"] = df_ohlcv.loc[
-            df_ohlcv.index.isin(df.index), "Close"
+        # Append OHLC data to DataFrame
+        df[["coint_corr_ticker", "open", "high", "low", "close"]] = df_ohlcv.loc[
+            df_ohlcv.index.isin(df.index), ["Ticker", "Open", "High", "Low", "Close"]
         ]
 
         return df
