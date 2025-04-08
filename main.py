@@ -29,13 +29,35 @@ def main() -> None:
     # Get arguments from command line
     args = main_utils.parse_arguments()
     date = args.date
-    strategy = args.strategy
     no_sentiment = args.no_sentiment
+    strategy = args.strategy
+    entry_struct = args.entry_struct
+    exit_struct = args.exit_struct
+    num_lots = args.num_lots
 
-    print(f"date : {date}")
+    print(f"\ndate : {date}")
+    print(f"no_sentiment : {no_sentiment}")
+    print(f"strategy : {strategy}")
+    print(f"entry_struct : {entry_struct}")
+    print(f"exit_struct : {exit_struct}")
+    print(f"num_lots : {num_lots}\n")
 
     # Generate list of S&P500 stocks
     snp500_list = utils.gen_snp500_list(URL, IGNORE_LIST)
+
+    # Perform cointegration and correlation analysis and save results as csv file
+    cal_coint_corr = CalCointCorr(snp500_list=snp500_list, date=date)
+    cal_coint_corr.run()
+
+    # Generate price action
+    hf_model = "ziweichen"
+    coint_corr_fn = "coint"
+    period = 5
+    gen_pa = GenPriceAction(date, hf_model, coint_corr_fn, period)
+    gen_pa.run()
+
+    # # Generate list of S&P500 stocks
+    # snp500_list = utils.gen_snp500_list(URL, IGNORE_LIST)
 
     # if not no_sentiment:
     #     # Generate DataFrame containing news and sentiment scores for different

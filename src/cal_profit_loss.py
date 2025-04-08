@@ -240,9 +240,9 @@ class CalProfitLoss:
         completed_trades = []
 
         for idx, dt, price, action in df.itertuples(index=True, name=None):
-            if idx >= len(df) - 1:
-                if self.num_open > 0:
-                    completed_trades.extend(self.update_sell_info(dt, price))
+            # Close all open positions at end of trading period
+            if idx >= len(df) - 1 and self.num_open > 0:
+                completed_trades.extend(self.update_sell_info(dt, price))
 
             elif action == "buy":
                 stock_trade = StockTrade(
@@ -280,7 +280,7 @@ class CalProfitLoss:
 
         Returns:
             (list[dict[str, Any]]):
-                List of dictionary containing required fields to generate DataFrame.
+                List of dictionaries containing required fields to generate DataFrame.
         """
 
         updated_trades = []

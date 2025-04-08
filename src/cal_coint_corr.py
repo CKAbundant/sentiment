@@ -89,11 +89,15 @@ class CalCointCorr:
         # Perform correlation and cointegration analysis for 5, 3 and 1 year
         for num_years in self.periods:
             # Path to csv file containing required cointegration and correlation data
-            coint_corr_path = f"{self.coint_corr_date_dir}/coint_corr_{num_years}y.csv"
+            coint_corr_path = Path(
+                f"{self.coint_corr_date_dir}/coint_corr_{num_years}y.csv"
+            )
 
             # If file exist, skip cointegration and correlation computation
-            if Path(coint_corr_path).is_file():
-                print(f"'{coint_corr_path}' exist. No further computation required.")
+            if coint_corr_path.is_file():
+                print(
+                    f"'{coint_corr_path.name}' exist at '{coint_corr_path.as_posix()}'. No further computation required."
+                )
                 return
 
             # Ensure subfolder exist

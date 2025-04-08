@@ -128,7 +128,7 @@ class GenPriceAction:
             # Append 'is_holiday', 'ticker' and 'weekday'
             df_av = self.append_is_holiday(df_av)
             df_av = self.append_dayname(df_av)
-            df_av.insert(0, "ticker", [ticker])
+            df_av.insert(0, "ticker", [ticker] * len(df_av))
 
             # Append closing price of ticker
             df_av = self.append_close(df_av, ticker)
@@ -265,10 +265,10 @@ class GenPriceAction:
         if coint_corr_list is None:
             return
 
-        for coint_ticker in coint_corr_list:
+        for coint_corr_ticker in coint_corr_list:
             # Generate and save DataFrame for each cointegrated stock
-            df_coint_corr_ticker = self.append_coint_corr_close(
-                df, coint_ticker=coint_ticker
+            df_coint_corr_ticker = self.append_coint_corr_ohlc(
+                df, coint_corr_ticker=coint_corr_ticker
             )
 
             # Append price-action i.e. buy if rating is >=4; sell if rating is <=2
@@ -280,7 +280,7 @@ class GenPriceAction:
             utils.create_folder(self.price_action_dir)
 
             # Ensure precision is maintained using Decimal object
-            file_name = f"{ticker}_{coint_ticker}.csv"
+            file_name = f"{ticker}_{coint_corr_ticker}.csv"
             file_path = f"{self.price_action_dir}/{file_name}"
             utils.save_csv(df_coint_corr_ticker, file_path, save_index=True)
             print(f"Saved '{file_name}' at '{file_path}'")

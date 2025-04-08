@@ -42,12 +42,28 @@ def parse_arguments() -> Namespace:
         help="Name of entry signal strategy (Default: 'Senti')",
     )
 
-    # Add '--trade' flag
+    # Add '--entry-struct' flag
     parser.add_argument(
-        "--trade",
+        "--entry-struct",
         type=str,
-        default="multiple_entry",
-        help="Name of  (Default: 'multiple_entry')",
+        default="multiple",
+        help="Name of entry structure (Default: 'multiple')",
+    )
+
+    # Add '--exit-struct' flag
+    parser.add_argument(
+        "--exit-struct",
+        type=str,
+        default="take_all",
+        help=("Name of exit structure (Default: 'take_all')"),
+    )
+
+    # Add '--num-lots' flag
+    parser.add_argument(
+        "--num-lots",
+        type=int,
+        default=1,
+        help=("Number of lots to open new position (Default: 1)"),
     )
 
     return parser.parse_args()
