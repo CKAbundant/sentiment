@@ -212,7 +212,7 @@ class GetTrades(ABC):
         entry_struct (EntryStruct):
             Whether to allow multiple open position ("mulitple") or single
             open position at a time ("single").
-        Exit_struct (ExitStruct):
+        exit_struct (ExitStruct):
             Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
             take profit for half open positions repeatedly ("half_life") or
             take profit for all open positions ("take_all").
@@ -222,6 +222,8 @@ class GetTrades(ABC):
             Net position for stock ticker (Default: 0).
         open_trades (deque[StockTrade]):
             List of open trades containing StockTrade pydantic object.
+        completed_trades (list[StockTrade]):
+            List of completed trades i.e. completed StockTrade pydantic object.
 
     """
 
@@ -238,6 +240,7 @@ class GetTrades(ABC):
         self.num_lots = num_lots
         self.net_pos: int = 0
         self.open_trades = deque()
+        self.completed_trades = []
 
     @abstractmethod
     def gen_trades(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -246,8 +249,8 @@ class GetTrades(ABC):
         pass
 
     def open_new_pos(
-        self, dt: date, ticker: str, close: Decimal, ent_sig: PriceAction
-    ) -> deque[StockTrade]:
+        self, dt: date, ticker: str, entry_price: float, ent_sig: PriceAction
+    ) -> None:
         """Open new position by creating new StockTrade object.
 
         - If entry_struct == "multiple", multiple open positions are allowed.
@@ -258,8 +261,8 @@ class GetTrades(ABC):
                 Trade date object.
             ticker (str):
                 Stock ticker to be traded.
-            close (Decimal):
-                Closing price for stock ticker.
+            entry_price (float):
+                Entry price for stock ticker.
             ent_sig (PriceAction):
                 Entry signal i.e. "buy", "sell" or "wait" to create new position.
 
@@ -277,13 +280,61 @@ class GetTrades(ABC):
                 entry_date=dt,
                 entry_action=ent_sig,
                 entry_lots=Decimal(str(self.num_lots)),
-                entry_price=Decimal(str(close)),
+                entry_price=Decimal(str(entry_price)),
             )
             self.open_trades.append(stock_trade)
             self.net_pos += self.num_lots if ent_sig == "buy" else -self.num_lots
 
+    def close_pos_with_profit(
+        self,
+        dt: date,
+        exit_price: float,
+        ex_sig: PriceAction,
+    ) -> None:
+        """Close existing position by updating StockTrade object in 'self.open_trades'.
+
+        - 'fifo' -> First-in-First-out.
+        - 'lifo' -> Last-in-Last-out.
+        - 'half_fifo' -> Reduce open position by half via First-in-First-out.
+        - 'half_lifo' -> Reduce open position by half via Last-in-Last-out.
+        - 'take_all' -> Exit all open positions.
+
+        Args:
+            dt (date):
+                Trade date object.
+            exit_price (float):
+                Exit price for stock ticker.
+            ex_sig (PriceAction):
+                Exit signal i.e. "buy", "sell" or "wait" to close existing position.
+
+        Returns:
+            None.
+        """
+
+        match self.exit_struct:
+            case "fifo":
+                self.completed_trades.extend(
+                    self.update_via_fifo_or_lifo(dt, ex_sig, exit_price, "fifo")
+                )
+            case "lifo":
+                self.completed_trades.extend(
+                    self.update_via_fifo_or_lifo(dt, ex_sig, exit_price, "lifo")
+                )
+            case "half_fifo":
+                self.completed_trades.extend(
+                    self.update_via_half_fifo(dt, ex_sig, exit_price)
+                )
+            case "half_lifo":
+                self.completed_trades.extend(
+                    self.update_via_half_fifo(dt, ex_sig, exit_price)
+                )
+            case _:
+                self.completed_trades.extend(
+                    self.update_via_take_all(dt, ex_sig, exit_price)
+                )
+
     def update_via_take_all(
-        self, dt: date, ex_sig: PriceAction, close: float
+        self, dt: date, ex_sig: PriceAction, exit_price: float
     ) -> list[dict[str, Any]]:
         """Update existing StockTrade objects and remove from self.open_trades.
 
@@ -292,8 +343,8 @@ class GetTrades(ABC):
                 datetime.date object of trade date.
             ex_sig (PriceAction):
                 Action to close open position either "buy" or "sell".
-            close (float):
-                Closing price of cointegrated stock.
+            exit_price (float):
+                Exit price of stock ticker.
 
         Returns:
             (list[dict[str, Any]]):
@@ -307,7 +358,7 @@ class GetTrades(ABC):
             trade.exit_date = dt
             trade.exit_action = ex_sig
             trade.exit_lots = trade.entry_lots  # Ensure entry lots matches exit lots
-            trade.exit_price = Decimal(str(close))
+            trade.exit_price = Decimal(str(exit_price))
 
             # Convert StockTrade to dictionary only if all fields are populated
             # i.e. trade completed.
@@ -322,7 +373,7 @@ class GetTrades(ABC):
         return updated_trades
 
     def update_via_fifo_or_lifo(
-        self, dt: date, ex_sig: PriceAction, close: float, fifo_or_lifo: str
+        self, dt: date, ex_sig: PriceAction, exit_price: float, fifo_or_lifo: str
     ) -> list[dict[str, Any]]:
         """Update earliest entry to 'self.open_trades'.
 
@@ -331,8 +382,8 @@ class GetTrades(ABC):
                 datetime.date object of trade date.
             ex_sig (PriceAction):
                 Action to close open position either "buy" or "sell".
-            close (float):
-                Closing price of cointegrated stock.
+            exit_price (float):
+                Exit price for stock ticker.
             fifo_or_lifo (str):
                 Either "fifo" or "lifo".
 
@@ -356,7 +407,7 @@ class GetTrades(ABC):
         trade.exit_date = dt
         trade.exit_action = ex_sig
         trade.exit_lots = trade.entry_lots
-        trade.exit_price = Decimal(str(close))
+        trade.exit_price = Decimal(str(exit_price))
 
         # Convert StockTrade to dictionary only if all fields are populated
         # i.e. trade completed.
@@ -368,18 +419,18 @@ class GetTrades(ABC):
 
         return updated_trades
 
-    def update_via_half_life(
-        self, dt: date, ex_sig: PriceAction, close: float
+    def update_via_half_fifo(
+        self, dt: date, ex_sig: PriceAction, exit_price: float
     ) -> list[dict[str, Any]]:
-        """Update existing StockTrade objects and remove from self.open_trades.
+        """Update existing StockTrade objects by reducing earliest trade by half.
 
         Args:
             dt (date):
                 datetime.date object of trade date.
             ex_sig (PriceAction):
                 Action to close open position either "buy" or "sell".
-            close (float):
-                Closing price of cointegrated stock.
+            exit_price (float):
+                Exit price of stock ticker.
 
         Returns:
             (list[dict[str, Any]]):
@@ -387,11 +438,12 @@ class GetTrades(ABC):
         """
 
         updated_trades = []
+        updated_open_trades = deque()
 
         # Half of net position
         half_pos = math.ceil(abs(self.net_pos) / 2)
 
-        for idx, trade in enumerate(self.open_trades):
+        for trade in self.open_trades:
             # Determine quantity to close based on 'half_pos'
             lots_to_exit, net_exit_lots = self._cal_exit_lots(
                 half_pos, trade.entry_lots, trade.exit_lots
@@ -401,13 +453,17 @@ class GetTrades(ABC):
             trade.exit_date = dt
             trade.exit_action = ex_sig
             trade.exit_lots = net_exit_lots
-            trade.exit_price = Decimal(str(close))
+            trade.exit_price = Decimal(str(exit_price))
 
-            # Convert StockTrade to dictionary only if all fields are populated
-            # i.e. trade completed.
             if self._validate_completed_trades(trade):
-                self.open_trades.popleft()
+                # Convert StockTrade to dictionary only if all fields are
+                # populated i.e. trade completed.
                 updated_trades.append(trade.model_dump())
+
+            else:
+                # Append uncompleted trade (i.e. partially close) to
+                # 'updated_open_trades'
+                updated_open_trades.append(trade)
 
             # Update remaining positions required to be closed and net position
             half_pos -= lots_to_exit
@@ -416,6 +472,72 @@ class GetTrades(ABC):
             if half_pos <= 0:
                 # Half of positions already closed. No further action required.
                 break
+
+        # Update 'self.open_trades' with 'updated_open_trades'
+        self.open_trades = updated_open_trades
+
+        return updated_trades
+
+    def update_via_half_lifo(
+        self, dt: date, ex_sig: PriceAction, exit_price: float
+    ) -> list[dict[str, Any]]:
+        """Update existing StockTrade objects by reducing latest trades by half.
+
+        Args:
+            dt (date):
+                datetime.date object of trade date.
+            ex_sig (PriceAction):
+                Action to close open position either "buy" or "sell".
+            exit_price (float):
+                Exit price of stock ticker.
+
+        Returns:
+            (list[dict[str, Any]]):
+                List of dictionary containing required fields to generate DataFrame.
+        """
+
+        updated_trades = []
+        updated_open_trades = deque()
+
+        # Reverse copy of 'self.open_trades'
+        open_trades_list = list(self.open_trades)
+        reversed_open_trades = open_trades_list[::-1]
+
+        # Half of net position
+        half_pos = math.ceil(abs(self.net_pos) / 2)
+
+        for trade in reversed_open_trades:
+            # Determine quantity to close based on 'half_pos'
+            lots_to_exit, net_exit_lots = self._cal_exit_lots(
+                half_pos, trade.entry_lots, trade.exit_lots
+            )
+
+            # Update StockTrade objects with exit info
+            trade.exit_date = dt
+            trade.exit_action = ex_sig
+            trade.exit_lots = net_exit_lots
+            trade.exit_price = Decimal(str(exit_price))
+
+            if self._validate_completed_trades(trade):
+                # Convert StockTrade to dictionary only if all fields are
+                # populated i.e. trade completed.
+                updated_trades.append(trade.model_dump())
+
+            else:
+                # Append uncompleted trade (i.e. partially close) to
+                # 'updated_open_trades'
+                updated_open_trades.appendleft(trade)
+
+            # Update remaining positions required to be closed and net position
+            half_pos -= lots_to_exit
+            self.net_pos += lots_to_exit if ex_sig == "buy" else -lots_to_exit
+
+            if half_pos <= 0:
+                # Half of positions already closed. No further action required.
+                break
+
+        # Update 'self.open_trades'
+        self.open_trades = updated_open_trades
 
         return updated_trades
 
@@ -447,11 +569,11 @@ class GetTrades(ABC):
 
         return Decimal(str(lots_to_close)), Decimal(str(net_exit_lots))
 
-    def _is_loss(self, close: float, ex_sig: PriceAction) -> bool:
+    def _is_loss(self, exit_price: float, ex_sig: PriceAction) -> bool:
         """Check if latest trade is running at a loss.
 
         Args:
-            close (float): Current closing price.
+            exit_price (float): Exit price of stock ticker.
             ex_sig (PriceAction): Price action to close existing position.
 
         Returns:
@@ -465,9 +587,9 @@ class GetTrades(ABC):
         latest_trade = self.open_trades[-1]
 
         if ex_sig == "buy":
-            return close >= latest_trade.entry_price
+            return exit_price >= latest_trade.entry_price
 
-        return close <= latest_trade.entry_price
+        return exit_price <= latest_trade.entry_price
 
     def _validate_completed_trades(self, stock_trade: StockTrade) -> bool:
         """Check if all the fields in StockTrade object are not null and
@@ -500,12 +622,12 @@ class TradingStrategy:
             'long_or_short'.
         entry (EntrySignal):
             Class instance of concrete implementation of 'EntrySignal' abstract class.
-        trades (GetTrades):
-            Class instance of concrete implementation of 'GetTrades' abstract class.
         exit (ExitSignal):
             If provided, Class instance of concrete implementation of 'ExitSignal'
             abstract class. If None, standard profit and stop loss will be applied via
             'gen_trades'.
+        trades (GetTrades):
+            Class instance of concrete implementation of 'GetTrades' abstract class.
         num_lots (int):
             Number of lots to open new position (Default: 1).
 
@@ -515,26 +637,23 @@ class TradingStrategy:
             'long_or_short'.
         entry (EntrySignal):
             Class instance of concrete implementation of 'EntrySignal' abstract class.
+        exit (ExitSignal):
+            Class instance of concrete implementation of 'ExitSignal' abstract class.
         trades (GetTrades):
-            Class instance of concrete implementation of 'GetTrades' abstract class.
-        exit (ExitSignal | None):
-            If provided, Class instance of concrete implementation of
-            'ExitSignal' abstract class.
+            Instance of concrete implementation of 'GetTrades' abstract class.
     """
 
     def __init__(
         self,
         entry_type: EntryType,
         entry: type[EntrySignal],
-        trades: type[GetTrades],
-        exit: type[ExitSignal] | None = None,
-        num_lots: int = 1,
+        exit: type[ExitSignal],
+        trades: GetTrades,
     ) -> None:
         self.entry_type = entry_type
         self.entry = entry(entry_type)
-        self.gen_trades = trades(num_lots)
-        self.exit = None if exit is None else exit(entry_type)
-        self.open_trades = []
+        self.exit = exit(entry_type)
+        self.trades = trades
 
     def __call__(self, df: pd.DataFrame) -> pd.DataFrame:
         """Generate completed trades based on trading strategy i.e.
@@ -548,6 +667,6 @@ class TradingStrategy:
             df = self.exit.gen_exit_signal(df)
 
         # Generate trades
-        df_trades = self.gen_trades.gen_trades(df)
+        df_trades = self.trades.gen_trades(df)
 
         return df_trades

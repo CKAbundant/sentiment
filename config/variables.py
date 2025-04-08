@@ -1,7 +1,7 @@
 from typing import Literal
 
 URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-IGNORE_LIST = ["BRK.B", "BF.B", "CTAS"]
+IGNORE_LIST = ["BRK.B", "BF.B", "CTAS", "LEN"]
 
 # Literal
 HF_MODEL = Literal["prosusai", "yiyanghkust", "ziweichen", "aventiq_ai"]

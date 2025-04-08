@@ -237,15 +237,18 @@ def set_decimal_type(data: pd.DataFrame, to_round: bool = False) -> pd.DataFrame
 
     df = data.copy()
 
-    # Convert numbers to Decimal type
     for col in df.columns:
-        # Check if any item in Panda Series is float type
-        if any([isinstance(item, float) for item in df[col].to_list()]):
+        # Column is float type and does not contain any missing values
+        if df[col].dtypes == float and not df[col].isna().any():
             df[col] = df[col].map(
                 lambda num: (
                     Decimal(str(round(num, 6))) if to_round else Decimal(str(num))
                 )
             )
+
+        # Column is float type and contain missing values
+        elif df[col].dtypes == float and df[col].isna().any():
+            df[col] = [Decimal(str(num)) if np.isnan(num) else num for num in df[col]]
 
     return df
 

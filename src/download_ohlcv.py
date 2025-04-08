@@ -35,9 +35,6 @@ class DownloadOHLCV:
             current date will be used (Default: None).
         batch_size (int):
             Number of tickers to download concurrently (Default: 20).
-        ignore_list (list[str]):
-            List of stocks to ignore due to data inavailbility in yfinance
-            (Default: ["BRK.B", "BF.B", "CTAS"]).
         stock_dir (str):
             Relative path to folder containing stocks OHLCV data
             (Default: "./data/stock").

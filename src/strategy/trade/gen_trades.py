@@ -36,7 +36,7 @@ from typing import Any
 
 import pandas as pd
 
-from config.variables import EntryStruct, ExitStruct
+from config.variables import EntryStruct, ExitStruct, PriceAction
 from src.strategy.base import GetTrades, StockTrade
 
 
@@ -53,10 +53,14 @@ class SentiTrades(GetTrades):
         >>> df_results = trades.gen_trades(df)
 
     Args:
+        ticker (str):
+            Stock ticker whose news are sentiment-rated i.e. news ticker.
+        coint_corr_ticker (str):
+            Stock ticker that is cointegrated/correlated with news ticker.
         entry_struct (EntryStruct):
             Whether to allow multiple open position ("mulitple") or single
             open position at a time ("single").
-        profit_struct (ExitStruct):
+        exit_struct (ExitStruct):
             Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
             take profit for half open positions repeatedly ("half_life") or
             take profit for all open positions ("take_all").
@@ -66,10 +70,14 @@ class SentiTrades(GetTrades):
             List of required columns to generate trades.
 
     Attributes:
+        ticker (str):
+            Stock ticker whose news are sentiment-rated i.e. news ticker.
+        coint_corr_ticker (str):
+            Stock ticker that is cointegrated/correlated with news ticker.
         entry_struct (EntryStruct):
             Whether to allow multiple open position ("mulitple") or single
             open position at a time ("single") (Default: "multiple").
-        profit_struct (ExitStruct):
+        exit_struct (ExitStruct):
             Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
             take profit for half open positions repeatedly ("half_life") or
             take profit for all open positions ("take_all") (Default: "take_all").
@@ -88,19 +96,21 @@ class SentiTrades(GetTrades):
 
     def __init__(
         self,
+        ticker: str,
+        coint_corr_ticker: str,
         entry_struct: EntryStruct = "multiple",
-        profit_struct: ExitStruct = "take_all",
+        exit_struct: ExitStruct = "take_all",
         num_lots: int = 1,
         req_cols: list[str] = [
             "date",
-            "ticker",
-            "coint_corr_ticker",
             "close",
             "entry_signal",
             "exit_signal",
         ],
     ) -> None:
-        super().__init__(entry_struct, profit_struct, num_lots)
+        super().__init__(entry_struct, exit_struct, num_lots)
+        self.ticker = ticker
+        self.coint_corr_ticker = coint_corr_ticker
         self.req_cols = req_cols
         self.no_trades = []
 
@@ -110,56 +120,40 @@ class SentiTrades(GetTrades):
         # FIlter out null values for OHLC due to weekends and holiday
         df = df_news.loc[~df_news["close"].isna(), self.req_cols].copy()
 
-        completed_trades = []
-
-        for idx, record in df.itertuples(index=True, name=None):
-            dt, _, c_ticker, close, ent_sig, ex_sig = record
-
+        for idx, dt, close, ent_sig, ex_sig in df.itertuples(index=True, name=None):
             # Close off all open positions at end of trading period
             if idx >= len(df) - 1 and self.net_pos != 0:
-                completed_trades.extend(self.update_via_take_all(dt, ex_sig, close))
+                self.completed_trades.extend(
+                    self.update_via_take_all(dt, ex_sig, close)
+                )
 
             # Signal to close existing open positions i.e. net position not equal to 0
             elif (ex_sig == "sell" or ex_sig == "buy") and self.net_pos != 0:
                 # Determine if exit signal is taking profit or stop loss
                 if self._is_loss(close, ex_sig):
-                    completed_trades.extend(self.update_via_take_all)
+                    # Close all open position if latest trade incurs loss
+                    self.completed_trades.extend(self.update_via_take_all)
 
                 else:
                     # Current closing price is higher than latest entry price
                     # i.e. running at a profit
-
-                    match self.exit_struct:
-                        case "fifo":
-                            completed_trades.extend(
-                                self.update_via_fifo_or_lifo(dt, ex_sig, close, "fifo")
-                            )
-                        case "lifo":
-                            completed_trades.extend(
-                                self.update_via_fifo_or_lifo(dt, ex_sig, close, "lifo")
-                            )
-                        case "half_life":
-                            completed_trades.extend(
-                                self.update_via_half_life(dt, ex_sig, close)
-                            )
-                        case _:
-                            completed_trades.extend(
-                                self.update_via_take_all(dt, ex_sig, close)
-                            )
+                    self.close_pos_with_profit(dt, close, ex_sig)
 
             # Signal to enter new position
             elif ent_sig == "buy" or ent_sig == "sell":
-                self.open_new_pos(dt, c_ticker, close, ent_sig)
+                self.open_new_pos(dt, self.coint_corr_ticker, close, ent_sig)
 
             else:
-                # No signal to initate new open position; or no open positions to close
+                # No signal to initate new open position or
+                # no open positions to close
                 continue
 
         # No completed trades recorded
-        if not completed_trades:
-            news_ticker = df["ticker"].iloc[-1]
-            self.no_trades.append(news_ticker)
+        if not self.completed_trades:
+            self.no_trades.append(self.ticker)
 
-        # Convert to DataFrame
-        df = pd.DataFrame(completed_trades)
-        df
+        # Append 'news_ticker' column to DataFrame generated from completed trades
+        df = pd.DataFrame(self.completed_trades)
+        df.insert(0, "news_ticker", self.ticker)
+
+        return df
