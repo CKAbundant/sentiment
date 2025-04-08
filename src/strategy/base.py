@@ -609,10 +609,10 @@ class TradingStrategy:
 
     Usage:
         >>> strategy = TradingStrategy(
-                entry=SentimentRater
-                profit_exit=SentimentRater
-                stop_exit = SentimentorMaxDrawDown
-                entry_type = "long_only"
+                entry_type="long_only",
+                entry=SentiEntry,
+                exit=SentiExit,
+                trades=SentiTrades,
             )
         >>> strategy.run()
 
@@ -628,8 +628,6 @@ class TradingStrategy:
             'gen_trades'.
         trades (GetTrades):
             Class instance of concrete implementation of 'GetTrades' abstract class.
-        num_lots (int):
-            Number of lots to open new position (Default: 1).
 
     Attributes:
         entry_type (EntryType):
@@ -655,18 +653,28 @@ class TradingStrategy:
         self.exit = exit(entry_type)
         self.trades = trades
 
-    def __call__(self, df: pd.DataFrame) -> pd.DataFrame:
+    def __call__(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Generate completed trades based on trading strategy i.e.
-        combination of entry, profit exit and stop exit."""
+        combination of entry, profit exit and stop exit.
+
+        Args:
+            df (pd.DataFrame): DataFrame without price action.
+
+        Returns:
+            df_trades (pd.DataFrame):
+                DataFrame containing completed trades info.
+            df_pa (pd.DataFrame):
+                DataFrame with price action (i.e. 'entry_signal', 'exit_signal').
+        """
 
         # Append 'entry_signal' column
-        df = self.entry.gen_entry_signal(df)
+        df_pa = self.entry.gen_entry_signal(df)
 
         if self.exit is not None:
             # Append 'exit_signal' if 'self.exit' exist
-            df = self.exit.gen_exit_signal(df)
+            df_pa = self.exit.gen_exit_signal(df_pa)
 
         # Generate trades
-        df_trades = self.trades.gen_trades(df)
+        df_trades, df_pa = self.trades.gen_trades(df_pa)
 
-        return df_trades
+        return df_trades, df_pa

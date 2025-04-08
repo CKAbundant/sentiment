@@ -191,7 +191,7 @@ class CalProfitLoss:
         # Combine all DataFrames
         df_results = pd.concat(results_list, axis=0).reset_index(drop=True)
 
-        # Create folder if not present
+        # Create folder if not exist
         utils.create_folder(self.model_dir)
 
         # Save combined DataFrame

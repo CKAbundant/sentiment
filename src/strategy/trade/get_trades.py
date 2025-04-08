@@ -117,7 +117,7 @@ class SentiTrades(GetTrades):
     def gen_trades(self, df_news: pd.DataFrame) -> pd.DataFrame:
         """Generate DataFrame containing completed trades for trading strategy."""
 
-        # FIlter out null values for OHLC due to weekends and holiday
+        # Filter out null values for OHLC due to weekends and holiday
         df = df_news.loc[~df_news["close"].isna(), self.req_cols].copy()
 
         for idx, dt, close, ent_sig, ex_sig in df.itertuples(index=True, name=None):

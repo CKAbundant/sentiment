@@ -32,6 +32,10 @@ from tqdm import tqdm
 
 from config.variables import COINT_CORR_FN, HF_MODEL
 from src.cal_coint_corr import CalCointCorr
+from src.strategy.base import TradingStrategy
+from src.strategy.entry.senti_entry import SentiEntry
+from src.strategy.exit.senti_exit import SentiExit
+from src.strategy.trade.get_trades import GetTrades
 from src.utils import utils
 
 
@@ -77,6 +81,9 @@ class GenPriceAction:
         senti_path (str):
             Relative path to CSV file containing news sentiment rating
             (Default: "./data/sentiment.csv").
+        model_dir (str):
+            Relative path of folder containing summary reports for specific
+            model and cointegration period.
         price_action_dir (str):
             Relative path of folder containing price action of ticker pairs for specific
             model and cointegration period.
@@ -104,9 +111,8 @@ class GenPriceAction:
 
         self.coint_corr_path = f"{coint_corr_date_dir}/coint_corr_{period}y.csv"
         self.senti_path = f"{results_date_dir}/sentiment.csv"
-        self.price_action_dir = (
-            f"{results_date_dir}/{hf_model}_{coint_corr_fn}_{period}/price_actions"
-        )
+        self.model_dir = f"{results_date_dir}/{hf_model}_{coint_corr_fn}_{period}"
+        self.price_action_dir = f"{self.model_dir}/price_actions"
 
     def run(self) -> None:
         """Generate and save DataFrame including average sentiment rating and
@@ -115,6 +121,8 @@ class GenPriceAction:
         # Load 'sentiment.csv' and 'coint_5y.csv'
         df_senti = pd.read_csv(self.senti_path)
         df_coint_corr = self.load_coint_corr()
+
+        results_list = []
 
         for ticker in tqdm(df_senti["ticker"].unique()):
             # Filter specific ticker
@@ -134,7 +142,18 @@ class GenPriceAction:
             df_av = self.append_close(df_av, ticker)
 
             # Append closing price of top N co-integrated stocks with lowest pvalue
-            self.gen_topn_close(df_av, df_coint_corr, ticker)
+            results_list.append(self.gen_topn_close(df_av, df_coint_corr, ticker))
+
+        # Combine list of DataFrame to a single DataFrame
+        df_results = pd.concat(results_list, axis=0).reset_index(drop=True)
+
+        # Create folder if not exist
+        utils.create_folder(self.model_dir)
+
+        # Save combined DataFrame
+        utils.save_csv(
+            df_results, f"{self.model_dir}/trade_results.csv", save_index=False
+        )
 
     def load_coint_corr(self) -> pd.DataFrame:
         """Load csv file containing cointegration and correlation info."""
@@ -254,10 +273,12 @@ class GenPriceAction:
                 Stock ticker whose news are sentiment-rated.
 
         Returns:
-            None.
+            (pd.DataFrame):
+                List of DataFrames containing completed trades for specific news ticker.
         """
 
         df = df_av.copy()
+        trades_list = []
 
         # Get list of cointegrated stocks with lowest pvalue
         coint_corr_list = self.get_topn_tickers(ticker, df_coint_corr)
@@ -267,32 +288,28 @@ class GenPriceAction:
 
         for coint_corr_ticker in coint_corr_list:
             # Generate and save DataFrame for each cointegrated stock
-            df_coint_corr_ticker = self.append_coint_corr_ohlc(
-                df, coint_corr_ticker=coint_corr_ticker
-            )
+            df_coint_corr_ticker = self.append_coint_corr_ohlc(df, coint_corr_ticker)
 
-            # Append price-action i.e. buy if rating is >=4; sell if rating is <=2
-            df_coint_corr_ticker["action"] = df_coint_corr_ticker[
-                "median_rating_excl"
-            ].map(self.gen_price_action)
+            # Load Sentiment Strategy (multiple + take_all)
+            senti_long_multi_all = TradingStrategy(
+                "long_only",
+                SentiEntry,
+                SentiExit,
+                GetTrades(),
+            )
+            df_trades, df_pa = senti_long_multi_all(df_coint_corr_ticker)
+            trades_list.append(df_trades)
 
             # Create folder if not exist
             utils.create_folder(self.price_action_dir)
 
-            # Ensure precision is maintained using Decimal object
+            # Save price action DataFrame as csv file
             file_name = f"{ticker}_{coint_corr_ticker}.csv"
             file_path = f"{self.price_action_dir}/{file_name}"
-            utils.save_csv(df_coint_corr_ticker, file_path, save_index=True)
-            print(f"Saved '{file_name}' at '{file_path}'")
+            utils.save_csv(df_pa, file_path, save_index=True)
 
-    def gen_price_action(self, rating: int) -> str:
-        """Return 'buy' if rating > 4, 'sell' if rating <= 2  else 'wait'."""
-
-        if rating >= 4:
-            return "buy"
-        if rating <= 2:
-            return "sell"
-        return "wait"
+        # Combine all trades DataFrame
+        return pd.concat(trades_list, axis=0).reset_index(drop=True)
 
     def get_topn_tickers(
         self, ticker: str, df_coint_corr: pd.DataFrame

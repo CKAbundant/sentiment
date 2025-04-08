@@ -8,7 +8,7 @@ from src.strategy import base
 
 class SentiExit(base.ExitSignal):
     """Use daily median sentiment rating for stock ticker news to execute
-    exit signal for cointegrated/correlated stock with profit.
+    exit signal for cointegrated/correlated stock.
 
     Args:
         entry_type (EntryType):
@@ -41,7 +41,7 @@ class SentiExit(base.ExitSignal):
         self.req_cols = [f"{coint_corr_ticker}_close", rating_col, "entry_signal"]
 
     def gen_exit_signal(self, df_senti: pd.DataFrame) -> pd.DataFrame:
-        """Append entry signal (i.e. 'buy', 'sell', 'wait') to DataFrame based
+        """Append exit signal (i.e. 'buy', 'sell', 'wait') to DataFrame based
         on 'entry_type'.
 
         Args:
@@ -51,7 +51,7 @@ class SentiExit(base.ExitSignal):
 
         Returns:
             df (pd.DataFrame):
-                DataFrame with 'profit_signal' column appended.
+                DataFrame with 'exit_signal' column appended.
         """
 
         df = df_senti.copy()
@@ -113,3 +113,94 @@ class SentiExit(base.ExitSignal):
             return "sell"
 
         return "wait"
+
+
+class SentiExitDrawdown(base.ExitSignal):
+    """Use daily median sentiment rating for stock ticker news and percentage
+    drawdownto execute exit signal for cointegrated/correlated stock.
+
+    Args:
+        entry_type (EntryType):
+            Either "long_only", "short_only", "long_or_short".
+        coint_corr_ticker (str):
+            Ticker for cointegrated/correlated ticker to news ticker.
+        rating_col (str):
+            Name of column containing sentiment rating to generate price action.
+        percent_drawdown (float):
+            Percentage drawdown before triggering stop loss (Default: 0.2).
+
+    Attributes:
+        entry_type (EntryType):
+            Either "long_only", "short_only", "long_or_short".
+        coint_corr_ticker (str):
+            Ticker for cointegrated/correlated ticker to news ticker.
+        rating_col (str):
+            Name of column containing sentiment rating to generate price action.
+        req_cols (list[str]):
+            List of columns that is required by the strategy.
+        percent_drawdown (float):
+            Percentage drawdown before triggering stop loss (Default: 0.2).
+    """
+
+    def __init__(
+        self,
+        entry_type: EntryType,
+        coint_corr_ticker: str,
+        rating_col: str = "median_rating_excl",
+        percent_drawdown: float = 0.2,
+    ) -> None:
+        super().__init__(entry_type)
+        self.coint_corr_ticker = coint_corr_ticker
+        self.rating_col = rating_col
+        self.req_cols = ["close", rating_col, "entry_signal"]
+        self.percent_drawdown = percent_drawdown
+
+    def gen_exit_signal(self, df_senti: pd.DataFrame) -> pd.DataFrame:
+        """Append exit signal (i.e. 'buy', 'sell', 'wait') to DataFrame based
+        on 'entry_type'.
+
+        - rating <= 2 or drawdown hit based on close -> 'sell' to close long position.
+        - rating >= 4 or drawdown hit based on close -> 'buy' to close short position.
+
+        Args:
+            df_senti (pd.DataFrame):
+                DataFrame containing median daily rating (i.e. 'median_rating_excl'
+                column) and closing price of cointegrated/correlated stock.
+
+        Returns:
+            df (pd.DataFrame):
+                DataFrame with 'exit_signal' column appended.
+        """
+
+        # Filter out null values for OHLC due to weekends and holiday
+        df = df_senti.loc[~df_senti["close"].isna(), self.req_cols].copy()
+
+        long_stop_price = None
+        short_stop_price = None
+        exit_action = []
+
+        for close, rating, ent_sig in df.itertuples(index=False, name=None):
+            # For long position
+            if ent_sig == "buy":
+                # Compute stop price
+                long_stop_price = close * (1 - self.percent_drawdown)
+
+            # For short position
+            elif ent_sig == "sell":
+                # Compute stop price
+                short_stop_price = close * (1 + self.percent_drawdown)
+
+            # stop loss hit or rating <= 2
+            if (long_stop_price and close <= long_stop_price) or rating <= 2:
+                exit_action.append("sell")
+
+            # stop loss hit or rating >= 4
+            elif (short_stop_price and close >= short_stop_price) or rating >= 4:
+                exit_action.append("buy")
+
+            else:
+                exit_action.append("wait")
+
+        df["exit_signal"] = exit_action
+
+        return df
