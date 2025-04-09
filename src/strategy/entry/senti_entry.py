@@ -39,7 +39,7 @@ class SentiEntry(base.EntrySignal):
         super().__init__(entry_type)
         self.coint_corr_ticker = coint_corr_ticker
         self.rating_col = rating_col
-        self.req_cols = [f"{coint_corr_ticker}_close", rating_col]
+        self.req_cols = ["close", rating_col]
 
     def gen_entry_signal(self, df_senti: pd.DataFrame) -> pd.DataFrame:
         """Append entry signal (i.e. 'buy', 'sell', 'wait') to DataFrame based

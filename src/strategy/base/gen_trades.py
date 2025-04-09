@@ -472,13 +472,19 @@ class GenTrades(ABC):
             open_lots.append(open_trade.entry_lots - open_trade.exit_lots)
             entry_prices.append(open_trade.entry_price)
 
-        # Compute total_investment and investment after stipulated percent loss
+        # Compute total_investment
         total_investment = sum(
             entry_price * lots for entry_price, lots in zip(entry_prices, open_lots)
         )
-        investment_after_loss = total_investment * (1 - percent_loss)
+
+        # Compute value after stipulated percent loss for long and short position
+        value_after_loss = (
+            total_investment * (1 - percent_loss)  # sell at lower price
+            if entry_action == "buy"
+            else total_investment * (1 + percent_loss)  # buy at higher price
+        )
 
         # Compute stop price to meet stipulated percent loss
-        stop_price = investment_after_loss / sum(open_lots)
+        stop_price = value_after_loss / sum(open_lots)
 
-        return stop_price
+        return Decimal(str(round(stop_price, 2)))

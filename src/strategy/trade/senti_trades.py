@@ -30,17 +30,14 @@ unless specified otherwise.
 """
 
 from collections import deque
-from datetime import date, datetime
-from decimal import Decimal
-from typing import Any
 
 import pandas as pd
 
-from config.variables import EntryStruct, ExitStruct, FixedPL, PriceAction
-from src.strategy.base import GetTrades, StockTrade
+from config.variables import EntryStruct, ExitStruct
+from src.strategy.base import GenTrades, StockTrade
 
 
-class SentiTrades(GetTrades):
+class SentiTrades(GenTrades):
     """Generate completed trades using sentiment rating strategy.
 
     - Get daily median sentiment rating (excluding rating 3) for stock ticker.
@@ -68,6 +65,15 @@ class SentiTrades(GetTrades):
             Number of lots to initiate new position each time (Default: 1).
         req_cols (list[str]):
             List of required columns to generate trades.
+        price_to_monitor (str):
+            Whether to monitor close price ("close") or both high and low price
+            ("high_low") (Default: "close").
+        percent_loss (float):
+            If provided, percentage loss allowed for investment.
+        percent_profit (float):
+            If provided, target percentage gain for investment.
+        percent_profit_trade (float):
+            If provided, target percentage gain for each trade.
 
     Attributes:
         ticker (str):
@@ -90,6 +96,15 @@ class SentiTrades(GetTrades):
             List of open trades containing StockTrade pydantic object.
         req_cols (list[str]):
             List of required columns to generate trades.
+        price_to_monitor (str):
+            Whether to monitor close price ("close") or both high and low price
+            ("high_low") (Default: "close").
+        percent_loss (float):
+            If provided, percentage loss allowed for investment.
+        percent_profit (float):
+            If provided, target percentage gain for investment.
+        percent_profit_trade (float):
+            If provided, target percentage gain for each trade.
         no_trades (list[str]):
             List containing stock tickers with no completed trades.
     """
@@ -103,17 +118,27 @@ class SentiTrades(GetTrades):
         num_lots: int = 1,
         req_cols: list[str] = [
             "date",
+            "high",
+            "low",
             "close",
             "entry_signal",
             "exit_signal",
         ],
-        fixed_pl: FixedPL | None = None,
+        price_to_monitor: str = "close",
+        percent_loss: float | None = None,
+        percent_loss_nearest: float | None = None,
+        percent_profit: float | None = None,
+        percent_profit_trade: float | None = None,
     ) -> None:
         super().__init__(entry_struct, exit_struct, num_lots)
         self.ticker = ticker
         self.coint_corr_ticker = coint_corr_ticker
         self.req_cols = req_cols
-        self.fixed_pl = fixed_pl
+        self.price_to_monitor = price_to_monitor
+        self.percent_loss = percent_loss
+        self.percent_loss_nearest = percent_loss_nearest
+        self.percent_profit = percent_profit
+        self.percent_profit_trade = percent_profit_trade
         self.no_trades = []
 
     def gen_trades(self, df_news: pd.DataFrame) -> pd.DataFrame:
@@ -122,12 +147,33 @@ class SentiTrades(GetTrades):
         # Filter out null values for OHLC due to weekends and holiday
         df = df_news.loc[~df_news["close"].isna(), self.req_cols].copy()
 
-        for idx, dt, close, ent_sig, ex_sig in df.itertuples(index=True, name=None):
+        for idx, dt, high, low, close, ent_sig, ex_sig in df.itertuples(
+            index=True, name=None
+        ):
             # Close off all open positions at end of trading period
             if idx >= len(df) - 1 and self.net_pos != 0:
                 self.completed_trades.extend(
                     self.update_via_take_all(dt, ex_sig, close)
                 )
+
+            elif self.percent_loss:
+                # Compute stop price to ensure total investment loss is limited to 'percent_loss'
+                stop_price = self.cal_stop_price()
+
+                if self.price_to_monitor == "close":
+                    if (ent_sig == "buy" and close <= stop_price) or (
+                        ent_sig == "sell" and close >= stop_price
+                    ):
+                        self.completed_trades.extend(
+                            self.update_via_take_all(dt, ex_sig, close)
+                        )
+                else:
+                    if (ent_sig == "buy" and low <= stop_price) or (
+                        ent_sig == "sell" and high >= stop_price
+                    ):
+                        self.completed_trades.extend(
+                            self.update_via_take_all(dt, ex_sig, close)
+                        )
 
             # Signal to close existing open positions i.e. net position not equal to 0
             elif (ex_sig == "sell" or ex_sig == "buy") and self.net_pos != 0:
