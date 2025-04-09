@@ -36,7 +36,7 @@ from typing import Any
 
 import pandas as pd
 
-from config.variables import EntryStruct, ExitStruct, PriceAction
+from config.variables import EntryStruct, ExitStruct, FixedPL, PriceAction
 from src.strategy.base import GetTrades, StockTrade
 
 
@@ -107,11 +107,13 @@ class SentiTrades(GetTrades):
             "entry_signal",
             "exit_signal",
         ],
+        fixed_pl: FixedPL | None = None,
     ) -> None:
         super().__init__(entry_struct, exit_struct, num_lots)
         self.ticker = ticker
         self.coint_corr_ticker = coint_corr_ticker
         self.req_cols = req_cols
+        self.fixed_pl = fixed_pl
         self.no_trades = []
 
     def gen_trades(self, df_news: pd.DataFrame) -> pd.DataFrame:

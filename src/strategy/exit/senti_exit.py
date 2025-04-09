@@ -1,5 +1,6 @@
 """Concrete implementation of 'ProfitExitSignal' abstract class."""
 
+import numpy as np
 import pandas as pd
 
 from config.variables import EntryType
@@ -148,12 +149,14 @@ class SentiExitDrawdown(base.ExitSignal):
         coint_corr_ticker: str,
         rating_col: str = "median_rating_excl",
         percent_drawdown: float = 0.2,
+        drawdown_type: str = "mean",
     ) -> None:
         super().__init__(entry_type)
         self.coint_corr_ticker = coint_corr_ticker
         self.rating_col = rating_col
         self.req_cols = ["close", rating_col, "entry_signal"]
         self.percent_drawdown = percent_drawdown
+        self.drawdown_type = drawdown_type
 
     def gen_exit_signal(self, df_senti: pd.DataFrame) -> pd.DataFrame:
         """Append exit signal (i.e. 'buy', 'sell', 'wait') to DataFrame based
@@ -175,28 +178,41 @@ class SentiExitDrawdown(base.ExitSignal):
         # Filter out null values for OHLC due to weekends and holiday
         df = df_senti.loc[~df_senti["close"].isna(), self.req_cols].copy()
 
-        long_stop_price = None
-        short_stop_price = None
+        long_stop_prices = []
+        short_stop_prices = []
         exit_action = []
 
         for close, rating, ent_sig in df.itertuples(index=False, name=None):
             # For long position
             if ent_sig == "buy":
                 # Compute stop price
-                long_stop_price = close * (1 - self.percent_drawdown)
+                long_stop_prices.append(close * (1 - self.percent_drawdown))
 
             # For short position
             elif ent_sig == "sell":
                 # Compute stop price
-                short_stop_price = close * (1 + self.percent_drawdown)
+                short_stop_prices.append(close * (1 + self.percent_drawdown))
+
+            max_long_stop_price = np.max(long_stop_prices) if long_stop_prices else 0
+            max_short_stop_price = (
+                np.max(short_stop_prices) if av_short_stop_prices else 0
+            )
 
             # stop loss hit or rating <= 2
-            if (long_stop_price and close <= long_stop_price) or rating <= 2:
+            if (long_stop_prices and close <= max_long_stop_price) or rating <= 2:
                 exit_action.append("sell")
 
+                # Reset stop prices
+                long_stop_prices = []
+                av_long_stop_price = 0
+
             # stop loss hit or rating >= 4
-            elif (short_stop_price and close >= short_stop_price) or rating >= 4:
+            elif (short_stop_prices and close >= max_short_stop_price) or rating >= 4:
                 exit_action.append("buy")
+
+                # Reset stop prices
+                short_stop_prices = []
+                av_short_stop_prices = 0
 
             else:
                 exit_action.append("wait")
