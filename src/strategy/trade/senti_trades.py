@@ -1,4 +1,4 @@
-"""Concrete implementation of 'GenTrades' abstract classes.
+"""Concrete implementation of 'GetTrades' abstract classes.
 
 - fixed_percent -> Use maximum, mean or median percentage drawdown
 (based on entry price) for stop loss; and percentage gain for profit

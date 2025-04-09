@@ -35,7 +35,7 @@ from src.cal_coint_corr import CalCointCorr
 from src.strategy.base import TradingStrategy
 from src.strategy.entry.senti_entry import SentiEntry
 from src.strategy.exit.senti_exit import SentiExit
-from src.strategy.trade.get_trades import GetTrades
+from src.strategy.trade.senti_trades import GetTrades
 from src.utils import utils
 
 

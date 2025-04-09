@@ -1,201 +1,20 @@
-"""Create class for different trading strategy while adhering to SOLID principle:
-
-1. Abstract class for entry and exit i.e. 'EntrySignal', 'ProfitSignal', 'StopSignal'.
-2. 'TradingStrategy' class to use composition rather than inherit from abstract class.
-
-Note that:
-- Append 'entry_signal', 'profit_signal' and 'stop_signal' columns to DataFrame
-containing prices and information required to generate buy/sell signal such as TA,
-sentiment rating, etc.
-"""
+"""Abstract class to generate completed trades."""
 
 import math
 from abc import ABC, abstractmethod
 from collections import deque
 from datetime import date
 from decimal import Decimal
-from typing import Any, Optional, get_args
+from typing import Any
 
-import numpy as np
 import pandas as pd
-from pydantic import BaseModel, Field, computed_field, field_validator
 
-from config.variables import EntryStruct, EntryType, ExitStruct, FixedPL, PriceAction
+from config.variables import EntryStruct, ExitStruct, PriceAction
+from src.strategy.base import StockTrade
 from src.utils import utils
 
 
-class StockTrade(BaseModel):
-    ticker: str = Field(description="Stock ticker to be traded")
-    entry_date: date = Field(description="Date when opening long position")
-    entry_action: str = Field(description="Either 'buy' or 'sell'", default="buy")
-    entry_lots: Decimal = Field(
-        description="Number of lots to open new open position", default=Decimal("1")
-    )
-    entry_price: Decimal = Field(description="Price when opening long position")
-    exit_date: Optional[date] = Field(
-        description="Date when exiting long position", default=None
-    )
-    exit_action: Optional[str] = Field(
-        description="Opposite of 'entry_action'", default="sell"
-    )
-    exit_lots: Optional[Decimal] = Field(
-        description="Number of lots to close open position"
-    )
-    exit_price: Optional[Decimal] = Field(
-        description="Price when exiting long position", default=None
-    )
-
-    @computed_field(description="Number of days held for trade")
-    def days_held(self) -> Optional[int]:
-        if self.exit_date is not None and self.entry_date is not None:
-            days_held = self.exit_date - self.entry_date
-            return days_held.days
-        return
-
-    @computed_field(description="Profit/loss when trade completed")
-    def profit_loss(self) -> Optional[Decimal]:
-        if self.exit_price is not None and self.entry_price is not None:
-            profit_loss = self.exit_price - self.entry_price
-            return profit_loss
-        return
-
-    @computed_field(description="Percentage return of trade")
-    def percent_ret(self) -> Optional[Decimal]:
-        if self.exit_price is not None and self.entry_price is not None:
-            percent_ret = (self.exit_price - self.entry_price) / self.entry_price
-            return percent_ret.quantize(Decimal("1.000000"))
-        return
-
-    @computed_field(description="daily percentage return of trade")
-    def daily_ret(self) -> Optional[Decimal]:
-        if self.percent_ret is not None and self.days_held is not None:
-            daily_ret = (1 + self.percent_ret) ** (1 / Decimal(str(self.days_held))) - 1
-            return daily_ret.quantize(Decimal("1.000000"))
-        return
-
-    @computed_field(description="Whether trade is profitable")
-    def win(self) -> Optional[int]:
-        if (pl := self.percent_ret) is not None:
-            return int(pl > 0)
-        return
-
-    model_config = {"validate_assignment": True}
-
-    @field_validator("exit_date")
-    def validate_exit_date(
-        cls, exit_date: Optional[date], info: dict[str, Any]
-    ) -> Optional[date]:
-        # Get entry_date from StockTrade object
-        entry_date = info.data.get("entry_date")
-
-        if exit_date is not None and entry_date is not None:
-            if exit_date < entry_date:
-                raise ValueError("Exit date must be after entry date!")
-        return exit_date
-
-    @field_validator("exit_lots")
-    def validate_exit_lots(
-        cls, exit_lots: Optional[Decimal], info: dict[str, Any]
-    ) -> Optional[Decimal]:
-        # Get entry_lots from StockTrade object
-        entry_lots = info.data.get("entry_lots")
-
-        if exit_lots is not None and entry_lots is not None:
-            if exit_lots > entry_lots:
-                raise ValueError("Exit lots must be equal or less than entry lots.")
-
-            if exit_lots < 0 or entry_lots < 0:
-                raise ValueError(f"Entry lots and exit lots must be positive.")
-
-        return exit_lots
-
-
-class TradeSignal(ABC):
-    """Abstract base class to generate entry and exit trade signal.
-
-    Args:
-        entry_type (EntryType):
-            Whether to allow long ("long_only"), short ("short_only") or
-            both long and short position ("long_or_short").
-
-    Attributes:
-        entry_type (EntryType):
-            Whether to allow long ("long_only"), short ("short_only") or
-            both long and short position ("long_or_short").
-    """
-
-    def __init__(self, entry_type: EntryType) -> None:
-        self.entry_type = self._validate_entry_type(entry_type)
-
-    def _validate_entry_type(self, entry_type: EntryType) -> EntryType:
-        if entry_type not in get_args(EntryType):
-            raise ValueError(f"'{entry_type}' is not a valid 'EntryType'.")
-
-        return entry_type
-
-
-class EntrySignal(TradeSignal, ABC):
-    """Abstract class to generate entry signal and number of lots to execute to
-    initiate new position"""
-
-    @abstractmethod
-    def gen_entry_signal(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Append 'entry_signal' (i.e. 'buy', 'sell', or 'wait')
-        column to DataFrame containing prices and any info required to generate
-        entry signal.
-
-        - 'long_only' -> only 'buy' or 'wait' signal allowed.
-        - 'short_only' -> only 'sell' or 'wait' signal allowed.
-        - 'long_or_short' -> 'buy', 'sell', or 'wait' signal allowed.
-        """
-
-        pass
-
-    def _validate_entry_signal(self, df: pd.DataFrame) -> None:
-        """Ensure that entry action is aligned with 'entry_type'."""
-        if "entry_signal" not in df.columns:
-            raise ValueError(f"'entry_signal' column not found!")
-
-        if "entry_lots" not in df.columns:
-            raise ValueError(f"'entry_lots' column not found!")
-
-        if self.entry_type == "long_only" and (df["entry_signal"] == "sell").any():
-            raise ValueError("Long only strategy cannot generate sell entry signals")
-
-        if self.entry_type == "short_only" and (df["entry_signal"] == "buy").any():
-            raise ValueError("Short only strategy cannot generate buy entry signals")
-
-
-class ExitSignal(TradeSignal, ABC):
-    """Abstract class to generate take profit signal to execute
-    i.e. exit existing position."""
-
-    @abstractmethod
-    def gen_exit_signal(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Append 'profit_signal' (i.e. 'buy', 'sell', or 'wait')
-        column to DataFrame containing prices and any info required to generate
-        entry signal.
-
-        - 'long_only' -> only 'sell' or 'wait' exit signal allowed.
-        - 'short_only' -> only 'buy' or 'wait' exit signal allowed.
-        - 'long_or_short' -> 'buy', 'sell', or 'wait' exit signal allowed.
-        """
-
-        pass
-
-    def _validate_exit_signal(self, df: pd.DataFrame) -> None:
-        """Ensure that entry action is aligned with 'entry_type'."""
-        if "exit_signal" not in df.columns:
-            raise ValueError(f"'exit_signal' column not found!")
-
-        if self.entry_type == "long_only" and (df["exit_signal"] == "buy").any():
-            raise ValueError("Long only strategy cannot generate buy exit signals.")
-
-        if self.entry_type == "short_only" and (df["exit_signal"] == "buy").any():
-            raise ValueError("Short only strategy cannot generate sell exit signals.")
-
-
-class GetTrades(ABC):
+class GenTrades(ABC):
     """Abstract class to generate completed trades for given strategy.
 
     Args:
@@ -285,6 +104,11 @@ class GetTrades(ABC):
             )
             self.open_trades.append(stock_trade)
             self.net_pos += self.num_lots if ent_sig == "buy" else -self.num_lots
+
+        if not self._validate_open_trades():
+            raise ValueError(
+                f"'self.open_trades' is still empty or 'entry_action' is not consistent."
+            )
 
     def close_pos_with_profit(
         self,
@@ -592,187 +416,69 @@ class GetTrades(ABC):
 
         return exit_price <= latest_trade.entry_price
 
-    def _validate_completed_trades(self, stock_trade: StockTrade) -> bool:
-        """Check if all the fields in StockTrade object are not null and
-        entry_lots matches exit_lots."""
+    def _validate_open_trades(self) -> bool:
+        """Validate whether 'entry_action' field is the same for all StockTrade
+        objects in 'self.open_trades'."""
 
+        if len(self.open_trades) == 0:
+            # No open trades available
+            return False
+
+        # Get 'entry_action' from 1st item in 'self.open_trades'
+        first_action = self.open_trades[0].entry_action
+
+        return all(
+            [open_trade.entry_action == first_action for open_trade in self.open_trades]
+        )
+
+    def _validate_completed_trades(self, stock_trade: StockTrade) -> bool:
+        """Validate whether StockTrade object is properly updated with no null values."""
+
+        # Check for null fields
         is_no_null_field = all(
             field is not None for field in stock_trade.model_dump().values()
         )
 
+        # Check if number of entry lots must equal number of exit lots
         is_lots_matched = stock_trade.entry_lots == stock_trade.exit_lots
 
         return is_no_null_field and is_lots_matched
 
-
-class TradingStrategy:
-    """Combine entry, profit and stop loss strategy as a complete trading strategy.
-
-    Usage:
-        >>> strategy = TradingStrategy(
-                entry_type="long_only",
-                entry=SentiEntry,
-                exit=SentiExit,
-                trades=SentiTrades,
-            )
-        >>> strategy.run()
-
-    Args:
-        entry_type (EntryType):
-            Types of open positions allowed either 'long_only', 'short_only' or
-            'long_or_short'.
-        entry (EntrySignal):
-            Class instance of concrete implementation of 'EntrySignal' abstract class.
-        exit (ExitSignal):
-            If provided, Class instance of concrete implementation of 'ExitSignal'
-            abstract class. If None, standard profit and stop loss will be applied via
-            'gen_trades'.
-        trades (GetTrades):
-            Class instance of concrete implementation of 'GetTrades' abstract class.
-        fixed_pl (FixedPL | None):
-            If provided, "mean_drawdown", or "max_drawdown" to stop loss based on price
-            movement.
-
-    Attributes:
-        entry_type (EntryType):
-            Types of open positions allowed either 'long_only', 'short_only' or
-            'long_or_short'.
-        entry (EntrySignal):
-            Class instance of concrete implementation of 'EntrySignal' abstract class.
-        exit (ExitSignal):
-            Class instance of concrete implementation of 'ExitSignal' abstract class.
-        trades (GetTrades):
-            Instance of concrete implementation of 'GetTrades' abstract class.
-        fixed_pl (FixedPL | None):
-            If provided, "mean_drawdown", or "max_drawdown" to stop loss based on price
-            movement.
-    """
-
-    def __init__(
-        self,
-        entry_type: EntryType,
-        entry: type[EntrySignal],
-        exit: type[ExitSignal],
-        trades: GetTrades,
-        fixed_pl: FixedPL | None = None,
-        percent_drawdown: float = 0.2,
-    ) -> None:
-        self.entry_type = entry_type
-        self.entry = entry(entry_type)
-        self.exit = exit(entry_type)
-        self.trades = trades
-        self.fixed_pl = fixed_pl
-        self.percent_drawdown = percent_drawdown
-
-    def __call__(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """Generate completed trades based on trading strategy i.e.
-        combination of entry, profit exit and stop exit.
+    def cal_stop_price(self, percent_loss: float = 0.2) -> Decimal | None:
+        """Compute required stop price to keep investment losses within stipulated
+        percentage loss.
 
         Args:
-            df (pd.DataFrame): DataFrame without price action.
+            percent_loss (float):
+                Percentage loss in investment value (Default: 0.2).
 
         Returns:
-            df_trades (pd.DataFrame):
-                DataFrame containing completed trades info.
-            df_pa (pd.DataFrame):
-                DataFrame with price action (i.e. 'entry_signal', 'exit_signal').
+            (Decimal | None): If available, required stop price to monitor.
         """
 
-        # Append 'entry_signal' column
-        df_pa = self.entry.gen_entry_signal(df)
+        if len(self.open_trades) == 0:
+            # No open positions hence no stop price
+            return
 
-        if self.exit is not None:
-            # Append 'exit_signal' if 'self.exit' exist
-            df_pa = self.exit.gen_exit_signal(df_pa)
+        if not self._validate_open_trades():
+            raise ValueError(f"'entry_action' is not consistent for all open trades.")
 
-        match self.fixed_pl:
-            case "all_drawdown":
-                df_pa = self.update_drawdown_mean(df_pa)
-            case "max_drawdown":
-                df_pa = self.update_drawdown_max(df_pa)
-            case _:
-                pass
+        entry_action = self.open_trades[0].entry_action
+        open_lots = []
+        entry_prices = []
 
-        # Generate trades
-        df_trades, df_pa = self.trades.gen_trades(df_pa)
+        # Extract entry_lots, entry_price, exit_lots from 'self.open_trades'
+        for open_trade in self.open_trades:
+            open_lots.append(open_trade.entry_lots - open_trade.exit_lots)
+            entry_prices.append(open_trade.entry_price)
 
-        return df_trades, df_pa
+        # Compute total_investment and investment after stipulated percent loss
+        total_investment = sum(
+            entry_price * lots for entry_price, lots in zip(entry_prices, open_lots)
+        )
+        investment_after_loss = total_investment * (1 - percent_loss)
 
-    def update_drawdown(self, df_pa: pd.DataFrame) -> pd.DataFrame:
-        """Update 'exit_signal' based on drawdown computed from open posiitons.
+        # Compute stop price to meet stipulated percent loss
+        stop_price = investment_after_loss / sum(open_lots)
 
-        - Get total investment value based on all open positions.
-        - Calculate minimum accepted investment value based on percentage drawdown.
-        - Calculate stop price to achieve minimum accepted investment value.
-
-        Args:
-            df_pa (pd.DataFrame): DataFrame containing both entry and exit signals.
-
-        Returns:
-            df_pa (pd.DataFrame): DataFrame updated with drawdown info.
-        """
-
-        # Filter out null values for OHLC due to weekends and holiday
-        df = df_pa.loc[~df_pa["close"].isna(), ["close", "ent_sig"]].copy()
-
-        long_stop_prices = []
-        short_stop_prices = []
-        long_entry_price_list = []
-        short_entry_price_list = []
-        exit_action = []
-
-        for close, ent_sig in df.itertuples(index=False, name=None):
-            # For long position
-            if ent_sig == "buy":
-                # Compute stop price
-                long_stop_prices.append(close * (1 - self.percent_drawdown))
-                long_entry_price_list.append(close)
-
-            # For short position
-            elif ent_sig == "sell":
-                # Compute stop price
-                short_stop_prices.append(close * (1 + self.percent_drawdown))
-                short_entry_price_list.append(close)
-
-            max_long_stop_price = np.max(long_stop_prices) if long_stop_prices else 0
-            max_short_stop_price = (
-                np.max(short_stop_prices) if av_short_stop_prices else 0
-            )
-
-            # stop loss hit or rating <= 2
-            if long_stop_prices and close <= max_long_stop_price:
-                exit_action.append("sell")
-
-                # Reset stop prices
-                long_stop_prices = []
-                av_long_stop_price = 0
-
-            # stop loss hit or rating >= 4
-            elif short_stop_prices and close >= max_short_stop_price:
-                exit_action.append("buy")
-
-                # Reset stop prices
-                short_stop_prices = []
-                av_short_stop_prices = 0
-
-            else:
-                exit_action.append("wait")
-
-        df["exit_signal"] = exit_action
-
-        return df
-
-    def update_drawdown_max(self, df_pa: pd.DataFrame) -> pd.DataFrame:
-        """Update 'exit_signal' based on highest drawdown for open positions.
-
-        - Long position -> highest stop price among all open positions.
-        - Short position -> lowest stop price among all open positions.
-
-        Args:
-            df_pa (pd.DataFrame): DataFrame containing both entry and exit signals.
-
-        Returns:
-            df_pa (pd.DataFrame): DataFrame updated with drawdown info.
-        """
-
-        pass
+        return stop_price
