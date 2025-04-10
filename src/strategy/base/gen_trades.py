@@ -432,8 +432,11 @@ class GenTrades(ABC):
         return exit_price <= latest_trade.entry_price
 
     def _validate_open_trades(self) -> bool:
-        """Validate whether 'entry_action' field is the same for all StockTrade
-        objects in 'self.open_trades'."""
+        """Validate StockTrade objects in 'self.open_trade'.
+
+        -'entry_action' fields are  same for all StockTrade objects.
+        - 'ticker' fields are same for all StockTrade objects.
+        """
 
         if len(self.open_trades) == 0:
             # No open trades available
@@ -441,9 +444,12 @@ class GenTrades(ABC):
 
         # Get 'entry_action' from 1st item in 'self.open_trades'
         first_action = self.open_trades[0].entry_action
+        first_ticker = self.open_trades[0].ticker
 
         return all(
-            [open_trade.entry_action == first_action for open_trade in self.open_trades]
+            open_trade.entry_action == first_action
+            and open_trade.ticker == first_ticker
+            for open_trade in self.open_trades
         )
 
     def _validate_completed_trades(self, stock_trade: StockTrade) -> bool:
