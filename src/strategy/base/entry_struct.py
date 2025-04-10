@@ -104,12 +104,13 @@ class MultiEntry(EntryStruct):
     - Number of lots entered are fixed to 'self.num_lots'.
 
     Usage:
+        >>> open_trades = deque()
         >>> ticker = "AAPL"
         >>> dt = date(2025, 4, 11)
         >>> entry_price = 200.0
         >>> ent_sig = "buy"
         >>> multi_entry = MultiEntry(num_lots=1)
-        >>> open_trades = multi_entry.open_new_pos(ticker, dt, entry_price, ent_sig)
+        >>> open_trades = multi_entry.open_new_pos(open_trades, ticker, dt, entry_price, ent_sig)
 
     Args:
         num_lots (int):
@@ -161,7 +162,6 @@ class MultiEntry(EntryStruct):
             entry_price=Decimal(str(entry_price)),
         )
         open_trades.append(stock_trade)
-
         self._validate_open_trades(open_trades)
 
         return open_trades
@@ -177,12 +177,13 @@ class MultiHalfEntry(EntryStruct):
     - Only if 'self.num_lots' > 1; and no fractional lots allowed.
 
     Usage:
+        >>> open_trades = deque()
         >>> ticker = "AAPL"
         >>> dt = date(2025, 4, 11)
         >>> entry_price = 200.0
         >>> ent_sig = "buy"
         >>> multi_entry = MultiHalfEntry(num_lots=1)
-        >>> open_trades = multi_entry.open_new_pos(ticker, dt, entry_price, ent_sig)
+        >>> open_trades = multi_entry.open_new_pos(open_trades, ticker, dt, entry_price, ent_sig)
 
     Args:
         num_lots (int):
@@ -237,7 +238,6 @@ class MultiHalfEntry(EntryStruct):
             entry_price=Decimal(str(entry_price)),
         )
         open_trades.append(stock_trade)
-
         self._validate_open_trades(open_trades)
 
         return open_trades
@@ -251,3 +251,77 @@ class MultiHalfEntry(EntryStruct):
         )
 
         return math.ceil(latest_entry_lots / 2)
+
+
+class SingleEntry(EntryStruct):
+    """Allows only 1 position of same ticker i.e. no new open position created
+    if there is existing open position.
+
+    - Number of lots entered are fixed to 'self.num_lots'.
+
+    Usage:
+        >>> open_trades = deque()
+        >>> ticker = "AAPL"
+        >>> dt = date(2025, 4, 11)
+        >>> entry_price = 200.0
+        >>> ent_sig = "buy"
+        >>> single_entry = SingleEntry(num_lots=1)
+        >>> open_trades = single_entry.open_new_pos(open_trades, ticker, dt, entry_price, ent_sig)
+
+    Args:
+        num_lots (int):
+            Default number of lots to enter each time (Default: 1).
+
+    Attributes:
+        num_lots (int):
+            Default number of lots to enter each time (Default: 1).
+    """
+
+    def __init__(self, num_lots: int = 1) -> None:
+        super().__init__(num_lots)
+
+    def open_new_pos(
+        self,
+        open_trades: deque[StockTrade],
+        ticker: str,
+        dt: date,
+        entry_price: float,
+        ent_sig: PriceAction,
+    ):
+        """Generate new 'StockTrade' object populating 'ticker', 'entry_date',
+        'entry_lots' and 'entry_price'.
+
+        Args:
+            open_trades (deque[StockTrade]):
+                Deque list of StockTrade pydantic object to record open trades.
+            ticker (str):
+                Stock ticker to be traded.
+            dt (date):
+                Trade date object.
+            entry_price (float):
+                Entry price for stock ticker.
+            ent_sig (PriceAction):
+                Entry signal i.e. "buy", "sell" or "wait" to create new position.
+
+        Returns:
+            open_trades (deque[StockTrade]):
+                Updated deque list of 'StockTrade' objects.
+        """
+
+        if len(open_trades) > 0:
+            # No new position added since there is existing position
+            return open_trades
+
+        # Create StockTrade object to record new long/short position
+        # based on 'ent_sig'
+        stock_trade = StockTrade(
+            ticker=ticker,
+            entry_date=dt,
+            entry_action=ent_sig,
+            entry_lots=Decimal(str(self.num_lots)),
+            entry_price=Decimal(str(entry_price)),
+        )
+        open_trades.append(stock_trade)
+        self._validate_open_trades(open_trades)
+
+        return open_trades

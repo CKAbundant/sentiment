@@ -8,7 +8,7 @@ instead of:
 'from src.strategy.base.gen_trades import GenTrades'
 """
 
-from .entry_struct import MultiEntry, MultiHalfEntry
+from .entry_struct import MultiEntry, MultiHalfEntry, SingleEntry
 from .gen_trades import GenTrades
 from .stock_trade import StockTrade
 from .trade_signal import EntrySignal, ExitSignal
@@ -23,4 +23,5 @@ __all__ = [
     "TradingStrategy",
     "MultiEntry",
     "MultiHalfEntry",
+    "SingleEntry",
 ]
