@@ -34,8 +34,8 @@ class EntryStruct(ABC):
         open_trades: deque[StockTrade],
         ticker: str,
         dt: date,
-        entry_price: float,
         ent_sig: PriceAction,
+        entry_price: float,
     ) -> deque[StockTrade]:
         """Generate new 'StockTrade' object populating 'ticker', 'entry_date',
         'entry_lots' and 'entry_price'.
@@ -47,10 +47,10 @@ class EntryStruct(ABC):
                 Stock ticker to be traded.
             dt (date):
                 Trade date object.
-            entry_price (float):
-                Entry price for stock ticker.
             ent_sig (PriceAction):
                 Entry signal i.e. "buy", "sell" or "wait" to create new position.
+            entry_price (float):
+                Entry price for stock ticker.
 
         Returns:
             open_trades (deque[StockTrade]):
@@ -129,8 +129,8 @@ class MultiEntry(EntryStruct):
         open_trades: deque[StockTrade],
         ticker: str,
         dt: date,
-        entry_price: float,
         ent_sig: PriceAction,
+        entry_price: float,
     ):
         """Generate new 'StockTrade' object populating 'ticker', 'entry_date',
         'entry_lots' and 'entry_price'.
@@ -142,10 +142,10 @@ class MultiEntry(EntryStruct):
                 Stock ticker to be traded.
             dt (date):
                 Trade date object.
-            entry_price (float):
-                Entry price for stock ticker.
             ent_sig (PriceAction):
                 Entry signal i.e. "buy", "sell" or "wait" to create new position.
+            entry_price (float):
+                Entry price for stock ticker.
 
         Returns:
             open_trades (deque[StockTrade]):
@@ -202,8 +202,8 @@ class MultiHalfEntry(EntryStruct):
         open_trades: deque[StockTrade],
         ticker: str,
         dt: date,
-        entry_price: float,
         ent_sig: PriceAction,
+        entry_price: float,
     ) -> deque[StockTrade]:
         """Generate new 'StockTrade' object populating 'ticker', 'entry_date',
         'entry_lots' and 'entry_price'.
@@ -215,10 +215,10 @@ class MultiHalfEntry(EntryStruct):
                 Stock ticker to be traded.
             dt (date):
                 Trade date object.
-            entry_price (float):
-                Entry price for stock ticker.
             ent_sig (PriceAction):
                 Entry signal i.e. "buy", "sell" or "wait" to create new position.
+            entry_price (float):
+                Entry price for stock ticker.
 
         Returns:
             open_trades (deque[StockTrade]):
@@ -285,8 +285,8 @@ class SingleEntry(EntryStruct):
         open_trades: deque[StockTrade],
         ticker: str,
         dt: date,
-        entry_price: float,
         ent_sig: PriceAction,
+        entry_price: float,
     ):
         """Generate new 'StockTrade' object populating 'ticker', 'entry_date',
         'entry_lots' and 'entry_price'.
@@ -298,10 +298,10 @@ class SingleEntry(EntryStruct):
                 Stock ticker to be traded.
             dt (date):
                 Trade date object.
-            entry_price (float):
-                Entry price for stock ticker.
             ent_sig (PriceAction):
                 Entry signal i.e. "buy", "sell" or "wait" to create new position.
+            entry_price (float):
+                Entry price for stock ticker.
 
         Returns:
             open_trades (deque[StockTrade]):
