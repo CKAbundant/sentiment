@@ -138,7 +138,6 @@ class MultiEntry(EntryStruct):
             entry_price=Decimal(str(entry_price)),
         )
         open_trades.append(stock_trade)
-        self.net_pos += self.num_lots if ent_sig == "buy" else -self.num_lots
 
         if not self._validate_open_trades():
             raise ValueError(

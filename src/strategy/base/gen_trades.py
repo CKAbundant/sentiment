@@ -7,6 +7,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from config.variables import EntryStruct, ExitStruct, PriceAction
@@ -69,10 +70,15 @@ class GenTrades(ABC):
     def get_net_pos(self) -> int:
         """Get net positions from 'self.open_trades'."""
 
-        return sum(
-            open_trade.entry_lots - open_trade.exit_lots
-            for open_trade in self.open_trades
-        )
+        # Get list of entry and exit lots from 'self.open_trades'
+        # Set exit lots to 0 if None
+        entry_lots_list = [trade.entry_lots for trade in self.open_trades]
+        exit_lots_list = [
+            0 if trade.exit_lots is None else trade.exit_lots
+            for trade in self.open_trades
+        ]
+
+        return sum(ent - ex for ent, ex in zip(entry_lots_list, exit_lots_list))
 
     def open_new_pos(
         self, ticker: str, dt: date, entry_price: float, ent_sig: PriceAction

@@ -23,7 +23,7 @@ class StockTrade(BaseModel):
         description="Date when exiting long position", default=None
     )
     exit_action: PriceAction | None = Field(
-        description="Opposite of 'entry_action' or 'wait'", default="sell"
+        description="Opposite of 'entry_action' or 'wait'", default=None
     )
     exit_lots: Decimal | None = Field(
         description="Number of lots to close open position", default=None, ge=1
