@@ -4,7 +4,7 @@ and 'GenTrades' into a strategy"""
 import numpy as np
 import pandas as pd
 
-from config.variables import EntryType, FixedPL
+from config.variables import EntryType
 from src.strategy.base import EntrySignal, ExitSignal, GenTrades
 
 

@@ -10,8 +10,9 @@ from typing import Any
 import pandas as pd
 
 from config.variables import EntryStruct, ExitStruct, PriceAction
-from src.strategy.base import StockTrade
 from src.utils import utils
+
+from .stock_trade import StockTrade
 
 
 class GenTrades(ABC):
@@ -38,8 +39,6 @@ class GenTrades(ABC):
             take profit for all open positions ("take_all").
         num_lots (int):
             Number of lots to initiate new position each time (Default: 1).
-        net_pos (int):
-            Net position for stock ticker (Default: 0).
         open_trades (deque[StockTrade]):
             List of open trades containing StockTrade pydantic object.
         completed_trades (list[StockTrade]):
@@ -58,7 +57,6 @@ class GenTrades(ABC):
         )
         self.exit_struct = utils.validate_literal(exit_struct, ExitStruct, "ExitStruct")
         self.num_lots = num_lots
-        self.net_pos: int = 0
         self.open_trades = deque()
         self.completed_trades = []
 
@@ -68,8 +66,16 @@ class GenTrades(ABC):
 
         pass
 
+    def get_net_pos(self) -> int:
+        """Get net positions from 'self.open_trades'."""
+
+        return sum(
+            open_trade.entry_lots - open_trade.exit_lots
+            for open_trade in self.open_trades
+        )
+
     def open_new_pos(
-        self, dt: date, ticker: str, entry_price: float, ent_sig: PriceAction
+        self, ticker: str, dt: date, entry_price: float, ent_sig: PriceAction
     ) -> None:
         """Open new position by creating new StockTrade object.
 
@@ -77,10 +83,10 @@ class GenTrades(ABC):
         - If entry_struct == "single", new open position can only be initiated after existing position is closed.
 
         Args:
-            dt (date):
-                Trade date object.
             ticker (str):
                 Stock ticker to be traded.
+            dt (date):
+                Trade date object.
             entry_price (float):
                 Entry price for stock ticker.
             ent_sig (PriceAction):
@@ -89,6 +95,9 @@ class GenTrades(ABC):
         Returns:
             None.
         """
+
+        # Get net position
+        net_pos = self.get_net_pos()
 
         if (
             self.entry_struct == "single" and self.net_pos == 0
