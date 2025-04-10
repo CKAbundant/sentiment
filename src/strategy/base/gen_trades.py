@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from config.variables import EntryStruct, ExitStruct, PriceAction
+from config.variables import STRUCT_MAPPING, EntryMethod, ExitMethod, PriceAction
 from src.utils import utils
 
 from .stock_trade import StockTrade
@@ -20,43 +20,22 @@ class GenTrades(ABC):
     """Abstract class to generate completed trades for given strategy.
 
     Args:
-        entry_struct (EntryStruct):
-            Whether to allow multiple open position ("multiple") or single
-            open position at a time ("single") (Default: "multiple").
-        exit_struct (ExitStruct):
-            Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
-            take profit for half open positions repeatedly ("half_life") or
-            take profit for all open positions ("take_all") (Default: "take_all").
         num_lots (int):
             Number of lots to initiate new position each time (Default: 1).
 
     Attributes:
-        entry_struct (EntryStruct):
-            Whether to allow multiple open position ("mulitple") or single
-            open position at a time ("single").
-        exit_struct (ExitStruct):
-            Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
-            take profit for half open positions repeatedly ("half_life") or
-            take profit for all open positions ("take_all").
         num_lots (int):
             Number of lots to initiate new position each time (Default: 1).
         open_trades (deque[StockTrade]):
             List of open trades containing StockTrade pydantic object.
         completed_trades (list[StockTrade]):
             List of completed trades i.e. completed StockTrade pydantic object.
-
     """
 
     def __init__(
         self,
-        entry_struct: EntryStruct = "multiple",
-        exit_struct: ExitStruct = "take_all",
         num_lots: int = 1,
     ) -> None:
-        self.entry_struct = utils.validate_literal(
-            entry_struct, EntryStruct, "EntryStruct"
-        )
-        self.exit_struct = utils.validate_literal(exit_struct, ExitStruct, "ExitStruct")
         self.num_lots = num_lots
         self.open_trades = deque()
         self.completed_trades = []
@@ -80,50 +59,44 @@ class GenTrades(ABC):
 
         return sum(ent - ex for ent, ex in zip(entry_lots_list, exit_lots_list))
 
-    def open_new_pos(
-        self, ticker: str, dt: date, entry_price: float, ent_sig: PriceAction
-    ) -> None:
-        """Open new position by creating new StockTrade object.
+    # def open_new_pos(
+    #     self, ticker: str, dt: date, entry_price: float, ent_sig: PriceAction
+    # ) -> None:
+    #     """Open new positions based on 'self.entry_struc'
 
-        - If entry_struct == "multiple", multiple open positions are allowed.
-        - If entry_struct == "single", new open position can only be initiated after existing position is closed.
+    #     Args:
+    #         ticker (str):
+    #             Stock ticker to be traded.
+    #         dt (date):
+    #             Trade date object.
+    #         entry_price (float):
+    #             Entry price for stock ticker.
+    #         ent_sig (PriceAction):
+    #             Entry signal i.e. "buy", "sell" or "wait" to create new position.
 
-        Args:
-            ticker (str):
-                Stock ticker to be traded.
-            dt (date):
-                Trade date object.
-            entry_price (float):
-                Entry price for stock ticker.
-            ent_sig (PriceAction):
-                Entry signal i.e. "buy", "sell" or "wait" to create new position.
+    #     Returns:
+    #         None.
+    #     """
 
-        Returns:
-            None.
-        """
+    #     # Get path to script containing concrete implementation of 'EntryStruct'
+    #     # and 'ExitStruct'
+    #     ent_path = f"{self.strategy_dir}/base/entry_struct.py"
+    #     ex_path = f"{self.strategy_dir}/base/exit_struct.py"
 
-        # Get net position
-        net_pos = self.get_net_pos()
-
-        if (
-            self.entry_struct == "single" and self.net_pos == 0
-        ) or self.entry_struct == "multiple":
-            # Create StockTrade object to record new long/short position
-            # based on 'ent_sig'
-            stock_trade = StockTrade(
-                ticker=ticker,
-                entry_date=dt,
-                entry_action=ent_sig,
-                entry_lots=Decimal(str(self.num_lots)),
-                entry_price=Decimal(str(entry_price)),
-            )
-            self.open_trades.append(stock_trade)
-            self.net_pos += self.num_lots if ent_sig == "buy" else -self.num_lots
-
-        if not self._validate_open_trades():
-            raise ValueError(
-                f"'self.open_trades' is still empty or 'entry_action' is not consistent."
-            )
+    #     # if (
+    #     #     self.entry_struct == "single" and self.net_pos == 0
+    #     # ) or self.entry_struct == "multiple":
+    #     #     # Create StockTrade object to record new long/short position
+    #     #     # based on 'ent_sig'
+    #     #     stock_trade = StockTrade(
+    #     #         ticker=ticker,
+    #     #         entry_date=dt,
+    #     #         entry_action=ent_sig,
+    #     #         entry_lots=Decimal(str(self.num_lots)),
+    #     #         entry_price=Decimal(str(entry_price)),
+    #     #     )
+    #     #     self.open_trades.append(stock_trade)
+    #     #     self.net_pos += self.num_lots if ent_sig == "buy" else -self.num_lots
 
     def close_pos_with_profit(
         self,
@@ -431,27 +404,6 @@ class GenTrades(ABC):
 
         return exit_price <= latest_trade.entry_price
 
-    def _validate_open_trades(self) -> bool:
-        """Validate StockTrade objects in 'self.open_trade'.
-
-        -'entry_action' fields are  same for all StockTrade objects.
-        - 'ticker' fields are same for all StockTrade objects.
-        """
-
-        if len(self.open_trades) == 0:
-            # No open trades available
-            return False
-
-        # Get 'entry_action' from 1st item in 'self.open_trades'
-        first_action = self.open_trades[0].entry_action
-        first_ticker = self.open_trades[0].ticker
-
-        return all(
-            open_trade.entry_action == first_action
-            and open_trade.ticker == first_ticker
-            for open_trade in self.open_trades
-        )
-
     def _validate_completed_trades(self, stock_trade: StockTrade) -> bool:
         """Validate whether StockTrade object is properly updated with no null values."""
 
@@ -480,9 +432,6 @@ class GenTrades(ABC):
         if len(self.open_trades) == 0:
             # No open positions hence no stop price
             return
-
-        if not self._validate_open_trades():
-            raise ValueError(f"'entry_action' is not consistent for all open trades.")
 
         entry_action = self.open_trades[0].entry_action
         open_lots = []

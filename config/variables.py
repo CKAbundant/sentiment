@@ -16,5 +16,18 @@ Component = Literal["word", "punct", "special"]
 # Trades
 PriceAction = Literal["buy", "sell", "wait"]
 EntryType = Literal["long_only", "short_only", "long_or_short"]
-EntryStruct = Literal["multiple", "multiple_half", "single"]
-ExitStruct = Literal["fifo", "lifo", "half_fifo", "half_lifo", "take_all"]
+EntryMethod = Literal["multiple", "multiple_half", "single"]
+ExitMethod = Literal["fifo", "lifo", "half_fifo", "half_lifo", "take_all"]
+
+
+# Mapping
+STRUCT_MAPPING = {
+    "multiple": "MultiEntry",
+    "multiple_half": "MultiHalfEntry",
+    "single": "SingleEntry",
+    "fifo": "FIFOExit",
+    "lifo": "LIFOExit",
+    "half_fifo": "HalfFIFOExit",
+    "half_lifo": "HalfLIFOExit",
+    "take_all": "TakeAllExit",
+}

@@ -33,8 +33,9 @@ from collections import deque
 
 import pandas as pd
 
-from config.variables import EntryStruct, ExitStruct
+from config.variables import STRUCT_MAPPING, EntryMethod, ExitMethod
 from src.strategy.base import GenTrades, StockTrade
+from src.utils import utils
 
 
 class SentiTrades(GenTrades):
@@ -54,10 +55,10 @@ class SentiTrades(GenTrades):
             Stock ticker whose news are sentiment-rated i.e. news ticker.
         coint_corr_ticker (str):
             Stock ticker that is cointegrated/correlated with news ticker.
-        entry_struct (EntryStruct):
+        entry_struct (EntryMethod):
             Whether to allow multiple open position ("mulitple") or single
             open position at a time ("single").
-        exit_struct (ExitStruct):
+        exit_struct (ExitMethod):
             Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
             take profit for half open positions repeatedly ("half_life") or
             take profit for all open positions ("take_all").
@@ -74,24 +75,24 @@ class SentiTrades(GenTrades):
             If provided, target percentage gain for investment.
         percent_profit_trade (float):
             If provided, target percentage gain for each trade.
+        strategy_dir (str):
+            Relative path to strategy folder containing subfolders for implementing
+            trading strategy (Default: "./src/strategy").
 
     Attributes:
         ticker (str):
             Stock ticker whose news are sentiment-rated i.e. news ticker.
         coint_corr_ticker (str):
             Stock ticker that is cointegrated/correlated with news ticker.
-        entry_struct (EntryStruct):
+        entry_struct (EntryMethod):
             Whether to allow multiple open position ("mulitple") or single
             open position at a time ("single") (Default: "multiple").
-        exit_struct (ExitStruct):
+        exit_struct (ExitMethod):
             Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
             take profit for half open positions repeatedly ("half_life") or
             take profit for all open positions ("take_all") (Default: "take_all").
         num_lots (int):
             Number of lots to initiate new position each time (Default: 1).
-        net_pos (int):
-            Net open position. Positive value = net long while negative value =
-            net short.
         open_trades (deque[StockTrade]):
             List of open trades containing StockTrade pydantic object.
         req_cols (list[str]):
@@ -107,14 +108,20 @@ class SentiTrades(GenTrades):
             If provided, target percentage gain for each trade.
         no_trades (list[str]):
             List containing stock tickers with no completed trades.
+        entry_struct_path (str):
+            Relative path to 'entry_struct.py' containing concrete implementation
+            of 'EntryStruct' abstract class.
+        exit_struct_path (str):
+            Relative path to 'exit_struct.py' containing concrete implementation
+            of 'ExitStruct' abstract class.
     """
 
     def __init__(
         self,
         ticker: str,
         coint_corr_ticker: str,
-        entry_struct: EntryStruct = "multiple",
-        exit_struct: ExitStruct = "take_all",
+        entry_struct: EntryMethod = "multiple",
+        exit_struct: ExitMethod = "take_all",
         num_lots: int = 1,
         req_cols: list[str] = [
             "date",
@@ -129,10 +136,13 @@ class SentiTrades(GenTrades):
         percent_loss_nearest: float | None = None,
         percent_profit: float | None = None,
         percent_profit_trade: float | None = None,
+        strategy_dir: str = "./src/strategy",
     ) -> None:
-        super().__init__(entry_struct, exit_struct, num_lots)
+        super().__init__(num_lots)
         self.ticker = ticker
         self.coint_corr_ticker = coint_corr_ticker
+        self.entry_struct = entry_struct
+        self.exit_struct = exit_struct
         self.req_cols = req_cols
         self.price_to_monitor = price_to_monitor
         self.percent_loss = percent_loss
@@ -140,9 +150,14 @@ class SentiTrades(GenTrades):
         self.percent_profit = percent_profit
         self.percent_profit_trade = percent_profit_trade
         self.no_trades = []
+        self.entry_struct_path = f"{strategy_dir}/base/entry_struct.py"
+        self.exit_struct_path = f"{strategy_dir}/base/entry_struct.py"
 
     def gen_trades(self, df_news: pd.DataFrame) -> pd.DataFrame:
         """Generate DataFrame containing completed trades for trading strategy."""
+
+        # Get net position
+        net_pos = self.get_net_pos()
 
         # Filter out null values for OHLC due to weekends and holiday
         df = df_news.loc[~df_news["close"].isna(), self.req_cols].copy()
@@ -151,7 +166,7 @@ class SentiTrades(GenTrades):
             index=True, name=None
         ):
             # Close off all open positions at end of trading period
-            if idx >= len(df) - 1 and self.net_pos != 0:
+            if idx >= len(df) - 1 and net_pos != 0:
                 self.completed_trades.extend(
                     self.update_via_take_all(dt, ex_sig, close)
                 )
@@ -176,7 +191,7 @@ class SentiTrades(GenTrades):
                         )
 
             # Signal to close existing open positions i.e. net position not equal to 0
-            elif (ex_sig == "sell" or ex_sig == "buy") and self.net_pos != 0:
+            elif (ex_sig == "sell" or ex_sig == "buy") and net_pos != 0:
                 # Determine if exit signal is taking profit or stop loss
                 if self._is_loss(close, ex_sig):
                     # Close all open position if latest trade incurs loss
@@ -189,7 +204,14 @@ class SentiTrades(GenTrades):
 
             # Signal to enter new position
             elif ent_sig == "buy" or ent_sig == "sell":
-                self.open_new_pos(dt, self.coint_corr_ticker, close, ent_sig)
+                # Get instance of 'EntryStruct'
+                class_name = STRUCT_MAPPING.get(self.entry_struct, "mulitple")
+                entry_method = utils.get_class_instance(
+                    class_name, self.entry_struct_path, num_lots=self.num_lots
+                )
+                self.open_trades = entry_method.open_new_pos(
+                    self.open_trades, self.coint_corr_ticker, dt, close, ent_sig
+                )
 
             else:
                 # No signal to initate new open position or

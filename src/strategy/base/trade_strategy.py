@@ -1,6 +1,8 @@
 """Class to combine concrete implementation of 'EntrySignal', 'ExitSignal'
 and 'GenTrades' into a strategy"""
 
+from typing import Type
+
 import numpy as np
 import pandas as pd
 
@@ -48,8 +50,8 @@ class TradingStrategy:
     def __init__(
         self,
         entry_type: EntryType,
-        entry: type[EntrySignal],
-        exit: type[ExitSignal],
+        entry: Type[EntrySignal],
+        exit: Type[ExitSignal],
         trades: GenTrades,
         percent_drawdown: float = 0.2,
     ) -> None:

@@ -1,17 +1,69 @@
 """Generic helper functions"""
 
+import importlib
 import pickle
 import random
 from collections import Counter, defaultdict
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Any, Literal, Type, TypeVar, get_args, get_origin
 
 import numpy as np
 import pandas as pd
 
 from config.variables import EntryType
+
+# Create generic type variable 'T'
+T = TypeVar("T")
+
+
+def get_class_instance(
+    class_name: str, script_path: str, **params: dict[str, Any]
+) -> T:
+    """Return instance of a class that is initialized with 'params'.
+
+    Args:
+        class_name (str):
+            Name of class in python script.
+        script_path (str):
+            Relative file path to python script that contains the required class.
+        **params (dict[str, Any]):
+            Arbitrary Keyword input arguments to initialize class instance.
+
+    Returns:
+        (T): Initialized instance of class.
+
+
+    """
+
+    # Convert script path to package path
+    module_path = convert_path_to_pkg(script_path)
+
+    try:
+        # Import python script at class path as python module
+        module = importlib.import_module(module_path)
+    except ModuleNotFoundError as e:
+        raise ModuleNotFoundError(f"Module not found in '{script_path}' : {e}")
+
+    try:
+        # Get class from module
+        req_class: Type[T] = getattr(module, class_name)
+    except AttributeError as e:
+        raise AttributeError(f"'{class_name}' class is not found in module.")
+
+    # Intialize instance of class
+    return req_class(**params)
+
+
+def convert_path_to_pkg(script_path: str) -> str:
+    """Convert file path to package path that can be used as input to importlib."""
+
+    # Remove suffix ".py"
+    script_path = Path(script_path).with_suffix("").as_posix()
+
+    # Convert to package format for use in 'importlib.import_module'
+    return script_path.replace("/", ".")
 
 
 def get_current_dt(fmt: str = "%Y%m%d_%H%M") -> str:
@@ -324,12 +376,13 @@ def display_divergent_rating(
     )
 
 
-def validate_literal(var: str, literal: Literal, literal_name: str) -> str:
+def validate_literal(var: str, literal: Any, literal_name: str) -> str:
     """Ensure the variable meets the requirement of literal type"""
 
-    var = var.lower()
+    if get_origin(literal) is not Literal:
+        raise TypeError(f"{literal} is not Literal.")
 
-    if var not in [item.lower for item in get_args(literal)]:
+    if var not in get_args(literal):
         raise ValueError(
             f"'{var}' is not valid item for '{literal_name}' Literal type."
         )
