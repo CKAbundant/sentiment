@@ -150,8 +150,18 @@ class SentiTrades(GenTrades):
         self.percent_profit = percent_profit
         self.percent_profit_trade = percent_profit_trade
         self.no_trades = []
-        self.entry_struct_path = f"{strategy_dir}/base/entry_struct.py"
-        self.exit_struct_path = f"{strategy_dir}/base/entry_struct.py"
+
+        # Get the path to the concrete implementation of 'EntryStruct' and 'ExitStruct'
+        entry_struct_path = f"{strategy_dir}/base/entry_struct.py"
+        exit_struct_path = f"{strategy_dir}/base/entry_struct.py"
+
+        # Get the
+        self.entry_method = utils.get_class_instance(
+            STRUCT_MAPPING.get(entry_struct), entry_struct_path
+        )
+        self.exit_method = utils.get_class_instance(
+            STRUCT_MAPPING.get(exit_struct), exit_struct_path
+        )
 
     def gen_trades(self, df_news: pd.DataFrame) -> pd.DataFrame:
         """Generate DataFrame containing completed trades for trading strategy."""

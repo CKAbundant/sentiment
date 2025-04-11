@@ -9,7 +9,7 @@ instead of:
 """
 
 from .entry_struct import MultiEntry, MultiHalfEntry, SingleEntry
-from .exit_struct import FIFOExit, HalfFIFOExit, LIFOExit
+from .exit_struct import FIFOExit, HalfFIFOExit, HalfLIFOExit, LIFOExit, TakeAllExit
 from .gen_trades import GenTrades
 from .stock_trade import StockTrade
 from .trade_signal import EntrySignal, ExitSignal
@@ -28,4 +28,6 @@ __all__ = [
     "FIFOExit",
     "LIFOExit",
     "HalfFIFOExit",
+    "HalfLIFOExit",
+    "TakeAllExit",
 ]
