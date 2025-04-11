@@ -1,6 +1,6 @@
 """Pydantic class to store trade info."""
 
-from datetime import date
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -11,7 +11,9 @@ from config.variables import PriceAction
 
 class StockTrade(BaseModel):
     ticker: str = Field(description="Stock ticker to be traded")
-    entry_date: date = Field(description="Date when opening long position")
+    entry_datetime: datetime = Field(
+        description="Datetime (New York time) when opening long position"
+    )
     entry_action: PriceAction = Field(description="Buy, sell or wait")
     entry_lots: Decimal = Field(
         description="Number of lots to open new open position",
@@ -19,14 +21,14 @@ class StockTrade(BaseModel):
         ge=1,
     )
     entry_price: Decimal = Field(description="Price when opening long position", gt=0)
-    exit_date: date | None = Field(
-        description="Date when exiting long position", default=None
+    exit_datetime: datetime | None = Field(
+        description="Datetime (New York time) when exiting long position", default=None
     )
     exit_action: PriceAction | None = Field(
         description="Opposite of 'entry_action' or 'wait'", default=None
     )
     exit_lots: Decimal | None = Field(
-        description="Number of lots to close open position", default=None, ge=1
+        description="Number of lots to close open position", default=Decimal("0"), ge=0
     )
     exit_price: Decimal | None = Field(
         description="Price when exiting long position", default=None, gt=0
@@ -34,8 +36,8 @@ class StockTrade(BaseModel):
 
     @computed_field(description="Number of days held for trade")
     def days_held(self) -> int | None:
-        if self.exit_date is not None and self.entry_date is not None:
-            days_held = self.exit_date - self.entry_date
+        if self.exit_datetime is not None and self.entry_datetime is not None:
+            days_held = self.exit_datetime - self.entry_datetime
             return days_held.days
         return
 
@@ -68,17 +70,17 @@ class StockTrade(BaseModel):
 
     model_config = {"validate_assignment": True}
 
-    @field_validator("exit_date")
-    def validate_exit_date(
-        cls, exit_date: date | None, info: dict[str, Any]
-    ) -> date | None:
-        # Get entry_date from StockTrade object
-        entry_date = info.data.get("entry_date")
+    @field_validator("exit_datetime")
+    def validate_exit_datetime(
+        cls, exit_datetime: datetime | None, info: dict[str, Any]
+    ) -> datetime | None:
+        # Get entry datetime from StockTrade object
+        entry_datetime = info.data.get("entry_datetime")
 
-        if exit_date is not None and entry_date is not None:
-            if exit_date < entry_date:
-                raise ValueError("Exit date must be after entry date!")
-        return exit_date
+        if exit_datetime is not None and entry_datetime is not None:
+            if exit_datetime < entry_datetime:
+                raise ValueError("Exit datetime must be after entry datetime!")
+        return exit_datetime
 
     @field_validator("exit_action")
     def validate_exit_action(

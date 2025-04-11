@@ -3,7 +3,7 @@
 import importlib
 import pickle
 import random
-from collections import Counter, defaultdict
+from collections import Counter, deque
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from config.variables import EntryType
+from src.strategy.base.stock_trade import StockTrade
 
 # Create generic type variable 'T'
 T = TypeVar("T")
@@ -70,38 +71,6 @@ def get_current_dt(fmt: str = "%Y%m%d_%H%M") -> str:
     """Return current datetime as string with 'specific' format."""
 
     return datetime.now().strftime(fmt)
-
-
-def save_pickle(dictionary: dict[str, Any], file_path: str) -> None:
-    """Save dictionary as pickle object."""
-
-    with open(file_path, "wb") as file:
-        pickle.dump(dictionary, file, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-def load_pickle(file_path: str) -> dict[str, Any]:
-    """Load dictionary from pickle file."""
-
-    with open(file_path, "rb") as file:
-        return pickle.load(file)
-
-
-def save_html(html_content: str, file_name: str, data_dir: str = "./data/html") -> None:
-    """Save HTML content as html file under 'data_dir' folder."""
-
-    file_path = f"{data_dir}/{file_name}"
-
-    with open(file_path, "w") as file:
-        file.write(html_content)
-
-
-def create_folder(data_dir: str | Path) -> None:
-    """Create folder if not exist."""
-
-    data_dir = Path(data_dir)
-
-    if not data_dir.is_dir():
-        data_dir.mkdir(parents=True, exist_ok=True)
 
 
 def gen_stock_list(
@@ -248,6 +217,38 @@ def load_csv(
     return df
 
 
+def save_pickle(dictionary: dict[str, Any], file_path: str) -> None:
+    """Save dictionary as pickle object."""
+
+    with open(file_path, "wb") as file:
+        pickle.dump(dictionary, file, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def load_pickle(file_path: str) -> dict[str, Any]:
+    """Load dictionary from pickle file."""
+
+    with open(file_path, "rb") as file:
+        return pickle.load(file)
+
+
+def save_html(html_content: str, file_name: str, data_dir: str = "./data/html") -> None:
+    """Save HTML content as html file under 'data_dir' folder."""
+
+    file_path = f"{data_dir}/{file_name}"
+
+    with open(file_path, "w") as file:
+        file.write(html_content)
+
+
+def create_folder(data_dir: str | Path) -> None:
+    """Create folder if not exist."""
+
+    data_dir = Path(data_dir)
+
+    if not data_dir.is_dir():
+        data_dir.mkdir(parents=True, exist_ok=True)
+
+
 def remove_unnamed_cols(data: pd.DataFrame) -> pd.DataFrame:
     """Set column label containing 'Unnamed:' to empty string for multi-level
     columns DataFrame."""
@@ -388,3 +389,9 @@ def validate_literal(var: str, literal: Any, literal_name: str) -> str:
         )
 
     return var
+
+
+def get_net_pos(open_trades: deque[StockTrade]) -> int:
+    """Get net positions from 'self.open_trades'."""
+
+    return sum(trade.entry_lots - trade.exit_lots for trade in open_trades)

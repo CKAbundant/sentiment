@@ -9,6 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 from config.variables import PriceAction
+from src.utils import utils
 
 from .stock_trade import StockTrade
 
@@ -32,8 +33,8 @@ class ExitStruct(ABC):
         self,
         open_trades: deque[StockTrade],
         dt: date,
-        exit_price: float,
         ex_sig: PriceAction,
+        exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
         """Update existing StockTrade objects (still open); and remove completed
         StockTrade objects in 'open_trades'.
@@ -56,6 +57,45 @@ class ExitStruct(ABC):
         """
 
         pass
+
+    def _update_pos(
+        self,
+        trade: StockTrade,
+        dt: date,
+        ex_sig: PriceAction,
+        exit_price: float,
+        exit_lots: int | None = None,
+    ) -> StockTrade:
+        """Update existing StockTrade objects (still open).
+
+        Args:
+            trade (StockTrade):
+                Existing StockTrade object for open trade.
+            dt (date):
+                Trade date object.
+            ex_sig (PriceAction):
+                Action to close open position either "buy" or "sell".
+            exit_price (float):
+                Exit price of stock ticker.
+            exit_lots (int | None):
+                If provided, number of lot to exit open position.
+
+        Returns:
+            open_trades (deque[StockTrade]):
+                Updated deque list of 'StockTrade' objects.
+            completed_trades (list[dict[str, Any]]):
+                List of dictionary containing required fields to generate DataFrame.
+        """
+
+        # Set 'exit_lots' to be equal to 'entry_lots' if not provided
+        exit_lots = exit_lots or trade.entry_lots
+
+        trade.exit_datetime = dt
+        trade.exit_action = ex_sig
+        trade.exit_lots = exit_lots
+        trade.exit_price = Decimal(str(exit_price))
+
+        return trade
 
     def _validate_completed_trades(self, stock_trade: StockTrade) -> bool:
         """Validate whether StockTrade object is properly updated with no null values."""
@@ -115,11 +155,7 @@ class FIFOExit(ExitStruct):
         trade = open_trades.popleft()
 
         # Update earliest StockTrade object
-        # Ensure exit lots = entry lots i.e. fully closed.
-        trade.exit_date = dt
-        trade.exit_action = ex_sig
-        trade.exit_lots = trade.entry_lots
-        trade.exit_price = Decimal(str(exit_price))
+        trade = self._update_pos(trade, dt, ex_sig, exit_price)
 
         # Convert StockTrade to dictionary only if all fields are populated
         # i.e. trade completed.
@@ -173,11 +209,7 @@ class LIFOExit(ExitStruct):
         trade = open_trades.pop()
 
         # Update earliest StockTrade object
-        # Ensure exit lots = entry lots i.e. fully closed.
-        trade.exit_date = dt
-        trade.exit_action = ex_sig
-        trade.exit_lots = trade.entry_lots
-        trade.exit_price = Decimal(str(exit_price))
+        trade = self._update_pos(trade, dt, ex_sig, exit_price)
 
         # Convert StockTrade to dictionary only if all fields are populated
         # i.e. trade completed.
@@ -218,55 +250,71 @@ class HalfFIFOExit(ExitStruct):
                 Exit price of stock ticker.
 
         Returns:
-            updated_open_trades (deque[StockTrade]):
+            new_open_trades (deque[StockTrade]):
                 Updated deque list of 'StockTrade' objects.
             completed_trades (list[dict[str, Any]]):
                 List of dictionary containing required fields to generate DataFrame.
         """
 
         completed_trades = []
-        updated_open_trades = deque()
+        new_open_trades = deque()
 
-        # Half of net position
-        half_pos = math.ceil(abs(self.net_pos) / 2)
+        if len(open_trades) == 0:
+            # No open trades to close
+            return new_open_trades, completed_trades
+
+        # Get net position and half of net position from 'open_trades'
+        net_pos = utils.get_net_pos(open_trades)
+        half_pos = math.ceil(abs(net_pos) / 2)
 
         for trade in open_trades:
-            # Determine quantity to close based on 'half_pos'
-            lots_to_exit, net_exit_lots = self._cal_exit_lots(
-                half_pos, trade.entry_lots, trade.exit_lots
-            )
+            # Update trade only if haven't reach half of net position
+            if half_pos > 0:
+                # Determine quantity to close based on 'half_pos'
+                lots_to_exit, updated_exit_lots = self._cal_exit_lots(
+                    half_pos, trade.entry_lots, trade.exit_lots
+                )
 
-            # Update StockTrade objects with exit info
-            trade.exit_date = dt
-            trade.exit_action = ex_sig
-            trade.exit_lots = net_exit_lots
-            trade.exit_price = Decimal(str(exit_price))
+                # Update StockTrade objects with exit info
+                trade = self._update_pos(
+                    trade, dt, ex_sig, exit_price, updated_exit_lots
+                )
 
-            if self._validate_completed_trades(trade):
-                # Convert StockTrade to dictionary only if all fields are
-                # populated i.e. trade completed.
-                completed_trades.append(trade.model_dump())
+                # Only update 'new_open_trades' if trades are still partially closed
+                if not self._validate_completed_trades(trade):
+                    new_open_trades.append(trade)
 
+                completed_trades.append(self._gen_completed_trade(trade, lots_to_exit))
+
+                # Update remaining positions required to be closed and net position
+                half_pos -= lots_to_exit
+
+            # trade not updated
             else:
-                # Append uncompleted trade (i.e. partially close) to
-                # 'updated_open_trades'
-                updated_open_trades.append(trade)
+                new_open_trades.append(trade)
 
-            # Update remaining positions required to be closed and net position
-            half_pos -= lots_to_exit
-            self.net_pos += lots_to_exit if ex_sig == "buy" else -lots_to_exit
+        return new_open_trades, completed_trades
 
-            if half_pos <= 0:
-                # Half of positions already closed. No further action required.
-                break
+    def _gen_completed_trade(
+        self, trade: StockTrade, lots_to_exit: Decimal
+    ) -> dict[str, Any]:
+        """Generate StockTrade object with completed trade from 'StockTrade'
+        and convert to dictionary."""
 
-        # Update 'self.open_trades' with 'updated_open_trades'
-        self.open_trades = updated_open_trades
+        # Create a shallow copy of the updated trade
+        completed_trade = trade.model_copy()
 
-        return updated_open_trades, completed_trades
+        # Update the 'entry_lots' to be same as 'lots_to_exit'
+        completed_trade.entry_lots = lots_to_exit
+        completed_trade.exit_lots = lots_to_exit
+
+        if not self._validate_completed_trades(completed_trade):
+            raise ValueError("Completed trades not properly closed.")
+
+        return completed_trade.model_dump()
 
     def _cal_exit_lots(
-        self, closed_qty: int, entry_lots: Decimal, existing_exit_lots: Decimal
+        self, total_qty_to_close: int, entry_lots: Decimal, existing_exit_lots: Decimal
     ) -> Decimal:
         """Compute number of lots to exit from open position allowing for partial fill.
 
@@ -276,19 +324,23 @@ class HalfFIFOExit(ExitStruct):
             existing_exit_lots (Decimal): Number of lots that have been closed already for trade.
 
         Returns:
-            lots_to_close (Decimal):
-                Number of lots to close for specific trade.
-            net_exit_lots (Decimal):
-                Net exit_lots after closing required number of lots
+            lots_to_exit (Decimal):
+                Required number of lots to close for specific trade.
+            updated_exit_lots (Decimal):
+                Updated number of exit lots after closing required number of lots
         """
 
-        # Compute number of lots to close for specific trade
-        if closed_qty < (entry_lots - existing_exit_lots):
-            lots_to_close = closed_qty
+        net_open = entry_lots - existing_exit_lots
+
+        if total_qty_to_close < net_open:
+            # total quantity to close is less than net open position
+            # hence can close all in single trade
+            lots_to_exit = total_qty_to_close
         else:
-            lots_to_close = entry_lots - existing_exit_lots
+            # Current trade not enough to meet total required quantity
+            lots_to_exit = net_open
 
-        # Compute net exit_lots after closing required number of lots
-        net_exit_lots = existing_exit_lots + lots_to_close
+        # Update total number of lots closed
+        updated_exit_lots = existing_exit_lots + lots_to_exit
 
-        return Decimal(str(lots_to_close)), Decimal(str(net_exit_lots))
+        return Decimal(str(lots_to_exit)), Decimal(str(updated_exit_lots))

@@ -157,7 +157,7 @@ class SentiTrades(GenTrades):
         """Generate DataFrame containing completed trades for trading strategy."""
 
         # Get net position
-        net_pos = self.get_net_pos()
+        net_pos = utils.get_net_pos(self.open_trades)
 
         # Filter out null values for OHLC due to weekends and holiday
         df = df_news.loc[~df_news["close"].isna(), self.req_cols].copy()

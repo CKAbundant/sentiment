@@ -4,7 +4,7 @@ entry stuctures."""
 import math
 from abc import ABC, abstractmethod
 from collections import Counter, deque
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from config.variables import PriceAction
@@ -33,7 +33,7 @@ class EntryStruct(ABC):
         self,
         open_trades: deque[StockTrade],
         ticker: str,
-        dt: date | str,
+        dt: datetime | str,
         ent_sig: PriceAction,
         entry_price: float,
     ) -> deque[StockTrade]:
@@ -45,8 +45,8 @@ class EntryStruct(ABC):
                 Deque list of StockTrade pydantic object to record open trades.
             ticker (str):
                 Stock ticker to be traded.
-            dt (date | str):
-                Trade date object or string in "YYYY-MM-DD" format.
+            dt (datetime | str):
+                Trade datetime object or string in "YYYY-MM-DD" format.
             ent_sig (PriceAction):
                 Entry signal i.e. "buy", "sell" or "wait" to create new position.
             entry_price (float):
@@ -62,7 +62,7 @@ class EntryStruct(ABC):
         self,
         open_trades: deque[StockTrade],
         ticker: str,
-        dt: date | str,
+        dt: datetime | str,
         ent_sig: PriceAction,
         entry_price: float,
         entry_lots: int | None = None,
@@ -75,8 +75,8 @@ class EntryStruct(ABC):
                 Deque list of StockTrade pydantic object to record open trades.
             ticker (str):
                 Stock ticker to be traded.
-            dt (date | str):
-                Trade date object or string in "YYYY-MM-DD" format.
+            dt (datetime | str):
+                Trade datetime object or string in "YYYY-MM-DD" format.
             ent_sig (PriceAction):
                 Entry signal i.e. "buy", "sell" or "wait" to create new position.
             entry_price (float):
@@ -92,7 +92,7 @@ class EntryStruct(ABC):
 
         return StockTrade(
             ticker=self._validate_ticker(open_trades, ticker),
-            entry_date=self._validate_entry_date(open_trades, dt),
+            entry_datetime=self._validate_entry_datetime(open_trades, dt),
             entry_action=self._validate_entry_action(open_trades, ent_sig),
             entry_lots=Decimal(str(entry_lots)),
             entry_price=Decimal(str(entry_price)),
@@ -152,36 +152,42 @@ class EntryStruct(ABC):
 
         return entry_action
 
-    def _validate_entry_date(
-        self, open_trades: deque[StockTrade], entry_date: date | str
-    ) -> str:
-        """Validate entry date is the same for all StockTrade objects in 'open_trades.
+    def _validate_entry_datetime(
+        self, open_trades: deque[StockTrade], entry_datetime: datetime | str
+    ) -> datetime:
+        """Validate entry datetime is the same for all StockTrade objects in 'open_trades.
 
         Args:
             open_trades (deque[StockTrade]):
                 Deque collection of open trades.
-            entry_date (date | str):
-                Entry date used to create new open trade ("YYYY-MM-DD" if string).
+            entry_datetime (datetime | str):
+                Entry datetime used to create new open trade
+                ("YYYY-MM-DD_HHMM" or "YYYY-MM-DD" if string).
 
         Return:
-            entry_date (str):
-                Validated entry date used to create new open trade.
+            entry_datetime (datetime):
+                Validated entry datetime used to create new open trade.
         """
 
-        if isinstance(entry_date, str):
-            entry_date = datetime.strptime(entry_date, "%Y-%m-%d").date()
+        if isinstance(entry_datetime, str):
+            if "_" in entry_datetime:
+                # YYYY-MM-HH_HHMM format
+                entry_datetime = datetime.strptime(entry_datetime, "%Y-%m-%d_%H%M")
+            else:
+                # YYYY-MM-HH format
+                entry_datetime = datetime.strptime(entry_datetime, "%Y-%m-%d")
 
         if len(open_trades) == 0:
-            return entry_date
+            return entry_datetime
 
-        # Check if entry date is less than latest entry date in 'open_trades'
-        latest_date = open_trades[-1].entry_date
-        if entry_date < latest_date:
+        # Check if entry datetime is less than latest entry datetime in 'open_trades'
+        latest_datetime = open_trades[-1].entry_datetime
+        if entry_datetime < latest_datetime:
             raise ValueError(
-                f"Entry date '{entry_date}' is earlier than latest entry date '{latest_date}'."
+                f"Entry datetime '{entry_datetime}' is earlier than latest entry datetime '{latest_datetime}'."
             )
 
-        return entry_date
+        return entry_datetime
 
     def _validate_open_trades(sel, open_trades: deque[StockTrade]) -> None:
         """Validate StockTrade objects in 'self.open_trade'.
@@ -209,7 +215,7 @@ class EntryStruct(ABC):
         if len(ticker_counter) > 1:
             raise ValueError("'ticker' field is not the same for all open trades.")
 
-        entry_dates = [trade.entry_date for trade in open_trades]
+        entry_dates = [trade.entry_datetime for trade in open_trades]
 
         if any(
             entry_dates[idx] > entry_dates[idx + 1]
@@ -230,7 +236,7 @@ class MultiEntry(EntryStruct):
     Usage:
         >>> open_trades = deque()
         >>> ticker = "AAPL"
-        >>> dt = date(2025, 4, 11)
+        >>> dt = datetime(2025, 4, 11)
         >>> entry_price = 200.0
         >>> ent_sig = "buy"
         >>> multi_entry = MultiEntry(num_lots=1)
@@ -252,7 +258,7 @@ class MultiEntry(EntryStruct):
         self,
         open_trades: deque[StockTrade],
         ticker: str,
-        dt: date | str,
+        dt: datetime | str,
         ent_sig: PriceAction,
         entry_price: float,
     ):
@@ -264,8 +270,8 @@ class MultiEntry(EntryStruct):
                 Deque list of StockTrade pydantic object to record open trades.
             ticker (str):
                 Stock ticker to be traded.
-            dt (date | str):
-                Trade date object or string in "YYYY-MM-DD" format.
+            dt (datetime | str):
+                Trade datetime object or string in "YYYY-MM-DD" format.
             ent_sig (PriceAction):
                 Entry signal i.e. "buy", "sell" or "wait" to create new position.
             entry_price (float):
@@ -297,7 +303,7 @@ class MultiHalfEntry(EntryStruct):
     Usage:
         >>> open_trades = deque()
         >>> ticker = "AAPL"
-        >>> dt = date(2025, 4, 11)
+        >>> dt = datetime(2025, 4, 11)
         >>> entry_price = 200.0
         >>> ent_sig = "buy"
         >>> multi_entry = MultiHalfEntry(num_lots=1)
@@ -319,7 +325,7 @@ class MultiHalfEntry(EntryStruct):
         self,
         open_trades: deque[StockTrade],
         ticker: str,
-        dt: date | str,
+        dt: datetime | str,
         ent_sig: PriceAction,
         entry_price: float,
     ) -> deque[StockTrade]:
@@ -331,8 +337,8 @@ class MultiHalfEntry(EntryStruct):
                 Deque list of StockTrade pydantic object to record open trades.
             ticker (str):
                 Stock ticker to be traded.
-            dt (date | str):
-                Trade date object or string in "YYYY-MM-DD" format.
+            dt (datetime | str):
+                Trade datetime object or string in "YYYY-MM-DD" format.
             ent_sig (PriceAction):
                 Entry signal i.e. "buy", "sell" or "wait" to create new position.
             entry_price (float):
@@ -376,7 +382,7 @@ class SingleEntry(EntryStruct):
     Usage:
         >>> open_trades = deque()
         >>> ticker = "AAPL"
-        >>> dt = date(2025, 4, 11)
+        >>> dt = datetime(2025, 4, 11)
         >>> entry_price = 200.0
         >>> ent_sig = "buy"
         >>> single_entry = SingleEntry(num_lots=1)
@@ -398,7 +404,7 @@ class SingleEntry(EntryStruct):
         self,
         open_trades: deque[StockTrade],
         ticker: str,
-        dt: date | str,
+        dt: datetime | str,
         ent_sig: PriceAction,
         entry_price: float,
     ):
@@ -410,8 +416,8 @@ class SingleEntry(EntryStruct):
                 Deque list of StockTrade pydantic object to record open trades.
             ticker (str):
                 Stock ticker to be traded.
-            dt (date | str):
-                Trade date object or string in "YYYY-MM-DD" format.
+            dt (datetime | str):
+                Trade datetime object or string in "YYYY-MM-DD" format.
             ent_sig (PriceAction):
                 Entry signal i.e. "buy", "sell" or "wait" to create new position.
             entry_price (float):
