@@ -1,6 +1,6 @@
 """Variables and Literal used for this repo."""
 
-from typing import Literal
+from typing import Literal, get_args
 
 # Download OHLCV
 URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
@@ -18,7 +18,12 @@ PriceAction = Literal["buy", "sell", "wait"]
 EntryType = Literal["long_only", "short_only", "long_or_short"]
 EntryMethod = Literal["multiple", "multiple_half", "single"]
 ExitMethod = Literal["fifo", "lifo", "half_fifo", "half_lifo", "take_all"]
-
+StopMethod = Literal[
+    "percent_loss",
+    "latest_loss",
+    "nearest_loss",
+    "day_high_low",
+]
 
 # Mapping
 STRUCT_MAPPING = {
@@ -30,4 +35,9 @@ STRUCT_MAPPING = {
     "half_fifo": "HalfFIFOExit",
     "half_lifo": "HalfLIFOExit",
     "take_all": "TakeAllExit",
+}
+
+EXIT_PRICE_MAPPING = {
+    "".join([meth.title() for meth in method.split("_")])
+    for method in get_args(StopMethod)
 }

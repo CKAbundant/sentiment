@@ -29,6 +29,9 @@ class GenTrades(ABC):
             Number of lots to initiate new position each time (Default: 1).
         req_cols (list[str]):
             List of required columns to generate trades.
+        monitor_close (bool):
+            Whether to monitor close price ("close") or both high and low price
+            (Default: True).
         strategy_dir (str):
             Relative path to strategy folder containing subfolders for implementing
             trading strategy (Default: "./src/strategy").
@@ -45,6 +48,9 @@ class GenTrades(ABC):
             Number of lots to initiate new position each time (Default: 1).
         req_cols (list[str]):
             List of required columns to generate trades.
+        monitor_close (bool):
+            Whether to monitor close price ("close") or both high and low price
+            (Default: True).
         open_trades (deque[StockTrade]):
                 Deque list of StockTrade pydantic object to record open trades.
     """
@@ -55,12 +61,14 @@ class GenTrades(ABC):
         exit_struct: ExitMethod,
         num_lots: int,
         req_cols: list[str],
+        monitor_close: bool = True,
         strategy_dir: str = "./src/strategy",
     ) -> None:
         self.entry_struct = entry_struct
         self.exit_struct = exit_struct
         self.num_lots = num_lots
         self.req_cols = req_cols
+        self.monitor_close = monitor_close
         self.strategy_dir = strategy_dir
         self.open_trades = deque()
 
@@ -156,7 +164,7 @@ class GenTrades(ABC):
 
         return completed_trades
 
-    def stop_all(
+    def exit_all(
         self,
         dt: datetime,
         ex_sig: PriceAction,
@@ -189,28 +197,6 @@ class GenTrades(ABC):
         )
 
         return completed_trades
-
-    def _is_latest_loss(self, exit_price: float, ex_sig: PriceAction) -> bool:
-        """Check if latest trade is running at a loss.
-
-        Args:
-            exit_price (float): Exit price of stock ticker.
-            ex_sig (PriceAction): Price action to close existing position.
-
-        Returns:
-            (bool): Whether the latest trade is running at a loss.
-        """
-
-        if len(self.open_trades) == 0:
-            raise ValueError("No open trades are available!")
-
-        # Latest trade is the last item in deque
-        latest_trade = self.open_trades[-1]
-
-        if ex_sig == "buy":
-            return exit_price > latest_trade.entry_price
-
-        return exit_price < latest_trade.entry_price
 
     def get_net_pos(self) -> int:
         """Get net positions from 'self.open_trades'."""
