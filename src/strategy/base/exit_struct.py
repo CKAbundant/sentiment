@@ -271,13 +271,11 @@ class HalfFIFOExit(ExitStruct):
             # Update trade only if haven't reach half of net position
             if half_pos > 0:
                 # Determine quantity to close based on 'half_pos'
-                lots_to_exit, updated_exit_lots = self._cal_exit_lots(
-                    half_pos, trade.entry_lots, trade.exit_lots
-                )
+                lots_to_exit = min(half_pos, trade.entry_lots - trade.exit_lots)
 
                 # Update StockTrade objects with exit info
                 trade = self._update_pos(
-                    trade, dt, ex_sig, exit_price, updated_exit_lots
+                    trade, dt, ex_sig, exit_price, trade.exit_lots + lots_to_exit
                 )
 
                 # Only update 'new_open_trades' if trades are still partially closed
@@ -312,38 +310,6 @@ class HalfFIFOExit(ExitStruct):
             raise ValueError("Completed trades not properly closed.")
 
         return completed_trade.model_dump()
-
-    def _cal_exit_lots(
-        self, total_qty_to_close: int, entry_lots: Decimal, existing_exit_lots: Decimal
-    ) -> Decimal:
-        """Compute number of lots to exit from open position allowing for partial fill.
-
-        Args:
-            closed_qty (int): Number of lots to close.
-            entry_lots (Decimal): Number of lots enter for trade.
-            existing_exit_lots (Decimal): Number of lots that have been closed already for trade.
-
-        Returns:
-            lots_to_exit (Decimal):
-                Required number of lots to close for specific trade.
-            updated_exit_lots (Decimal):
-                Updated number of exit lots after closing required number of lots
-        """
-
-        net_open = entry_lots - existing_exit_lots
-
-        if total_qty_to_close < net_open:
-            # total quantity to close is less than net open position
-            # hence can close all in single trade
-            lots_to_exit = total_qty_to_close
-        else:
-            # Current trade not enough to meet total required quantity
-            lots_to_exit = net_open
-
-        # Update total number of lots closed
-        updated_exit_lots = existing_exit_lots + lots_to_exit
-
-        return Decimal(str(lots_to_exit)), Decimal(str(updated_exit_lots))
 
 
 class HalfLIFOExit(ExitStruct):
@@ -402,13 +368,11 @@ class HalfLIFOExit(ExitStruct):
             # Update trade only if haven't reach half of net position
             if half_pos > 0:
                 # Determine quantity to close based on 'half_pos'
-                lots_to_exit, updated_exit_lots = self._cal_exit_lots(
-                    half_pos, trade.entry_lots, trade.exit_lots
-                )
+                lots_to_exit = min(half_pos, trade.entry_lots - trade.exit_lots)
 
                 # Update StockTrade objects with exit info
                 trade = self._update_pos(
-                    trade, dt, ex_sig, exit_price, updated_exit_lots
+                    trade, dt, ex_sig, exit_price, trade.exit_lots + lots_to_exit
                 )
 
                 # Only update 'new_open_trades' if trades are still partially closed
@@ -443,38 +407,6 @@ class HalfLIFOExit(ExitStruct):
             raise ValueError("Completed trades not properly closed.")
 
         return completed_trade.model_dump()
-
-    def _cal_exit_lots(
-        self, total_qty_to_close: int, entry_lots: Decimal, existing_exit_lots: Decimal
-    ) -> Decimal:
-        """Compute number of lots to exit from open position allowing for partial fill.
-
-        Args:
-            closed_qty (int): Number of lots to close.
-            entry_lots (Decimal): Number of lots enter for trade.
-            existing_exit_lots (Decimal): Number of lots that have been closed already for trade.
-
-        Returns:
-            lots_to_exit (Decimal):
-                Required number of lots to close for specific trade.
-            updated_exit_lots (Decimal):
-                Updated number of exit lots after closing required number of lots
-        """
-
-        net_open = entry_lots - existing_exit_lots
-
-        if total_qty_to_close < net_open:
-            # total quantity to close is less than net open position
-            # hence can close all in single trade
-            lots_to_exit = total_qty_to_close
-        else:
-            # Current trade not enough to meet total required quantity
-            lots_to_exit = net_open
-
-        # Update total number of lots closed
-        updated_exit_lots = existing_exit_lots + lots_to_exit
-
-        return Decimal(str(lots_to_exit)), Decimal(str(updated_exit_lots))
 
 
 class TakeAllExit(ExitStruct):
