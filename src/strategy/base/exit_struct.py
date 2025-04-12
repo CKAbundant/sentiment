@@ -4,12 +4,11 @@ exit stuctures."""
 import math
 from abc import ABC, abstractmethod
 from collections import deque
-from datetime import date
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
 from config.variables import PriceAction
-from src.utils import utils
 
 from .stock_trade import StockTrade
 
@@ -32,7 +31,7 @@ class ExitStruct(ABC):
     def close_pos(
         self,
         open_trades: deque[StockTrade],
-        dt: date,
+        dt: datetime,
         ex_sig: PriceAction,
         exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
@@ -42,8 +41,8 @@ class ExitStruct(ABC):
         Args:
             open_trades (deque[StockTrade]):
                 Deque list of StockTrade pydantic object to record open trades.
-            dt (date):
-                Trade date object.
+            dt (datetime):
+                Trade datetime object.
             ex_sig (PriceAction):
                 Action to close open position either "buy" or "sell".
             exit_price (float):
@@ -61,7 +60,7 @@ class ExitStruct(ABC):
     def _update_pos(
         self,
         trade: StockTrade,
-        dt: date,
+        dt: datetime,
         ex_sig: PriceAction,
         exit_price: float,
         exit_lots: int | None = None,
@@ -71,8 +70,8 @@ class ExitStruct(ABC):
         Args:
             trade (StockTrade):
                 Existing StockTrade object for open trade.
-            dt (date):
-                Trade date object.
+            dt (datetime):
+                Trade datetime object.
             ex_sig (PriceAction):
                 Action to close open position either "buy" or "sell".
             exit_price (float):
@@ -121,7 +120,7 @@ class FIFOExit(ExitStruct):
     def close_pos(
         self,
         open_trades: deque[StockTrade],
-        dt: date,
+        dt: datetime,
         ex_sig: PriceAction,
         exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
@@ -131,8 +130,8 @@ class FIFOExit(ExitStruct):
         Args:
             open_trades (deque[StockTrade]):
                 Deque list of StockTrade pydantic object to record open trades.
-            dt (date):
-                Trade date object.
+            dt (datetime):
+                Trade datetime object.
             ex_sig (PriceAction):
                 Action to close open position either "buy" or "sell".
             exit_price (float):
@@ -175,7 +174,7 @@ class LIFOExit(ExitStruct):
     def close_pos(
         self,
         open_trades: deque[StockTrade],
-        dt: date,
+        dt: datetime,
         ex_sig: PriceAction,
         exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
@@ -185,8 +184,8 @@ class LIFOExit(ExitStruct):
         Args:
             open_trades (deque[StockTrade]):
                 Deque list of StockTrade pydantic object to record open trades.
-            dt (date):
-                Trade date object.
+            dt (datetime):
+                Trade datetime object.
             ex_sig (PriceAction):
                 Action to close open position either "buy" or "sell".
             exit_price (float):
@@ -232,7 +231,7 @@ class HalfFIFOExit(ExitStruct):
     def close_pos(
         self,
         open_trades: deque[StockTrade],
-        dt: date,
+        dt: datetime,
         ex_sig: PriceAction,
         exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
@@ -242,8 +241,8 @@ class HalfFIFOExit(ExitStruct):
         Args:
             open_trades (deque[StockTrade]):
                 Deque list of StockTrade pydantic object to record open trades.
-            dt (date):
-                Trade date object.
+            dt (datetime):
+                Trade datetime object.
             ex_sig (PriceAction):
                 Action to close open position either "buy" or "sell".
             exit_price (float):
@@ -264,7 +263,7 @@ class HalfFIFOExit(ExitStruct):
             return new_open_trades, completed_trades
 
         # Get net position and half of net position from 'open_trades'
-        net_pos = utils.get_net_pos(open_trades)
+        net_pos = self.get_net_pos(open_trades)
         half_pos = math.ceil(abs(net_pos) / 2)
 
         for trade in open_trades:
@@ -311,6 +310,11 @@ class HalfFIFOExit(ExitStruct):
 
         return completed_trade.model_dump()
 
+    def get_net_pos(self, open_trades: deque[StockTrade]) -> int:
+        """Get net positions from 'self.open_trades'."""
+
+        return sum(trade.entry_lots - trade.exit_lots for trade in open_trades)
+
 
 class HalfLIFOExit(ExitStruct):
     """keep taking profit by exiting half of latest positions . For example:
@@ -325,7 +329,7 @@ class HalfLIFOExit(ExitStruct):
     def close_pos(
         self,
         open_trades: deque[StockTrade],
-        dt: date,
+        dt: datetime,
         ex_sig: PriceAction,
         exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
@@ -335,8 +339,8 @@ class HalfLIFOExit(ExitStruct):
         Args:
             open_trades (deque[StockTrade]):
                 Deque list of StockTrade pydantic object to record open trades.
-            dt (date):
-                Trade date object.
+            dt (datetime):
+                Trade datetime object.
             ex_sig (PriceAction):
                 Action to close open position either "buy" or "sell".
             exit_price (float):
@@ -361,7 +365,7 @@ class HalfLIFOExit(ExitStruct):
         reversed_open_trades = open_trades_list[::-1]
 
         # Get net position and half of net position from 'open_trades'
-        net_pos = utils.get_net_pos(open_trades)
+        net_pos = self.get_net_pos(open_trades)
         half_pos = math.ceil(abs(net_pos) / 2)
 
         for trade in reversed_open_trades:
@@ -408,6 +412,11 @@ class HalfLIFOExit(ExitStruct):
 
         return completed_trade.model_dump()
 
+    def get_net_pos(self, open_trades: deque[StockTrade]) -> int:
+        """Get net positions from 'self.open_trades'."""
+
+        return sum(trade.entry_lots - trade.exit_lots for trade in open_trades)
+
 
 class TakeAllExit(ExitStruct):
     """Exit all open positions at a loss."""
@@ -415,7 +424,7 @@ class TakeAllExit(ExitStruct):
     def close_pos(
         self,
         open_trades: deque[StockTrade],
-        dt: date,
+        dt: datetime,
         ex_sig: PriceAction,
         exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
@@ -425,8 +434,8 @@ class TakeAllExit(ExitStruct):
         Args:
             open_trades (deque[StockTrade]):
                 Deque list of StockTrade pydantic object to record open trades.
-            dt (date):
-                Trade date object.
+            dt (datetime):
+                Trade datetime object.
             ex_sig (PriceAction):
                 Action to close open position either "buy" or "sell".
             exit_price (float):

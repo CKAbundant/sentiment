@@ -1,13 +1,11 @@
-"""Abstract class to generate completed trades."""
+"""Abstract classes for generating completed trades."""
 
-import math
 from abc import ABC, abstractmethod
 from collections import deque
-from datetime import date
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from config.variables import STRUCT_MAPPING, EntryMethod, ExitMethod, PriceAction
@@ -20,33 +18,179 @@ class GenTrades(ABC):
     """Abstract class to generate completed trades for given strategy.
 
     Args:
+        entry_struct (EntryMethod):
+            Whether to allow multiple open position ("mulitple") or single
+            open position at a time ("single") (Default: "multiple").
+        exit_struct (ExitMethod):
+            Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
+            take profit for half open positions repeatedly ("half_life") or
+            take profit for all open positions ("take_all") (Default: "take_all").
         num_lots (int):
             Number of lots to initiate new position each time (Default: 1).
+        req_cols (list[str]):
+            List of required columns to generate trades.
+        strategy_dir (str):
+            Relative path to strategy folder containing subfolders for implementing
+            trading strategy (Default: "./src/strategy").
 
     Attributes:
+        entry_struct (EntryMethod):
+            Whether to allow multiple open position ("mulitple") or single
+            open position at a time ("single") (Default: "multiple").
+        exit_struct (ExitMethod):
+            Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
+            take profit for half open positions repeatedly ("half_life") or
+            take profit for all open positions ("take_all") (Default: "take_all").
         num_lots (int):
             Number of lots to initiate new position each time (Default: 1).
+        req_cols (list[str]):
+            List of required columns to generate trades.
         open_trades (deque[StockTrade]):
-            List of open trades containing StockTrade pydantic object.
-        completed_trades (list[StockTrade]):
-            List of completed trades i.e. completed StockTrade pydantic object.
+                Deque list of StockTrade pydantic object to record open trades.
     """
 
     def __init__(
         self,
-        num_lots: int = 1,
+        entry_struct: EntryMethod,
+        exit_struct: ExitMethod,
+        num_lots: int,
+        req_cols: list[str],
+        strategy_dir: str = "./src/strategy",
     ) -> None:
+        self.entry_struct = entry_struct
+        self.exit_struct = exit_struct
         self.num_lots = num_lots
+        self.req_cols = req_cols
+        self.strategy_dir = strategy_dir
         self.open_trades = deque()
-        self.completed_trades = []
 
     @abstractmethod
-    def gen_trades(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Generate DataFrame containing completed trades for given strategy"""
+    def gen_trades(
+        self, df_signals: pd.DataFrame
+    ) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
+        """Generate DataFrame containing completed trades for given strategy.
+
+        Args:
+            df_signals (pd.DataFrame): DataFrame containing entry and exit signals.
+
+        Returns:
+            df_trades (pd.DataFrame):
+                DataFrame containing completed trades.
+            df_signals (pd.DataFrame):
+                DataFrame containing updated exit signals price-related stops.
+        """
 
         pass
 
-    def _is_loss(self, exit_price: float, ex_sig: PriceAction) -> bool:
+    def open_pos(
+        self,
+        ticker: str,
+        dt: datetime | str,
+        ent_sig: PriceAction,
+        entry_price: float,
+    ) -> None:
+        """Create new open position based on 'self.entry_struct' method.
+
+        Args:
+            ticker (str):
+                Stock ticker to be traded.
+            dt (datetime | str):
+                Trade datetime object or string in "YYYY-MM-DD" format.
+            ent_sig (PriceAction):
+                Entry signal i.e. "buy", "sell" or "wait" to create new position.
+            entry_price (float):
+                Entry price for stock ticker.
+
+        Returns:
+            None.
+        """
+
+        # Name of concrete class implementation of 'EntryStruct'
+        class_name = STRUCT_MAPPING.get(self.entry_struct)
+
+        # File path to concrete class implementation
+        entry_struct_path = f"{self.strategy_dir}/base/entry_struct.py"
+
+        # Get initialized instance of concrete class implementation
+        entry_instance = utils.get_class_instance(
+            class_name, entry_struct_path, num_lots=self.num_lots
+        )
+
+        # Update 'self.open_trades' with new open position
+        self.open_trades = entry_instance.open_new_pos(ticker, dt, ent_sig, entry_price)
+
+    def take_profit(
+        self,
+        dt: datetime,
+        ex_sig: PriceAction,
+        exit_price: float,
+    ) -> list[dict[str, Any]]:
+        """Close existing open positions based on 'self.exit_struct' method.
+
+        Args:
+            dt (datetime):
+                Trade datetime object.
+            ex_sig (PriceAction):
+                Action to close open position either "buy" or "sell".
+            exit_price (float):
+                Exit price of stock ticker.
+
+        Returns:
+            completed_trades (list[dict[str, Any]]):
+                List of dictionary containing required fields to generate DataFrame.
+        """
+
+        # Name of concrete class implementation of 'ExitStruct'
+        class_name = STRUCT_MAPPING.get(self.exit_struct)
+
+        # File path to concrete class implementation
+        exit_struct_path = f"{self.strategy_dir}/base/exit_struct.py"
+
+        # Get initialized instance of concrete class implementation
+        exit_instance = utils.get_class_instance(class_name, exit_struct_path)
+
+        # Update open trades and generate completed trades
+        self.open_trades, completed_trades = exit_instance.close_pos(
+            self.open_trades, dt, ex_sig, exit_price
+        )
+
+        return completed_trades
+
+    def stop_all(
+        self,
+        dt: datetime,
+        ex_sig: PriceAction,
+        exit_price: float,
+    ) -> list[dict[str, Any]]:
+        """Close all open positions via 'TakeAllExit.close_pos' method.
+
+        Args:
+            dt (datetime):
+                Trade datetime object.
+            ex_sig (PriceAction):
+                Action to close open position either "buy" or "sell".
+            exit_price (float):
+                Exit price of stock ticker.
+
+        Returns:
+            completed_trades (list[dict[str, Any]]):
+                List of dictionary containing required fields to generate DataFrame.
+        """
+
+        # File path to concrete class implementation
+        exit_struct_path = f"{self.strategy_dir}/base/exit_struct.py"
+
+        # Get initialized instance of concrete class implementation
+        take_all_exit = utils.get_class_instance("TakeAllExit", exit_struct_path)
+
+        # Update open trades and generate completed trades
+        self.open_trades, completed_trades = take_all_exit.close_pos(
+            self.open_trades, dt, ex_sig, exit_price
+        )
+
+        return completed_trades
+
+    def _is_latest_loss(self, exit_price: float, ex_sig: PriceAction) -> bool:
         """Check if latest trade is running at a loss.
 
         Args:
@@ -64,61 +208,11 @@ class GenTrades(ABC):
         latest_trade = self.open_trades[-1]
 
         if ex_sig == "buy":
-            return exit_price >= latest_trade.entry_price
+            return exit_price > latest_trade.entry_price
 
-        return exit_price <= latest_trade.entry_price
+        return exit_price < latest_trade.entry_price
 
-    def _validate_completed_trades(self, stock_trade: StockTrade) -> bool:
-        """Validate whether StockTrade object is properly updated with no null values."""
+    def get_net_pos(self) -> int:
+        """Get net positions from 'self.open_trades'."""
 
-        # Check for null fields
-        is_no_null_field = all(
-            field is not None for field in stock_trade.model_dump().values()
-        )
-
-        # Check if number of entry lots must equal number of exit lots
-        is_lots_matched = stock_trade.entry_lots == stock_trade.exit_lots
-
-        return is_no_null_field and is_lots_matched
-
-    def cal_stop_price(self, percent_loss: float = 0.2) -> Decimal | None:
-        """Compute required stop price to keep investment losses within stipulated
-        percentage loss.
-
-        Args:
-            percent_loss (float):
-                Percentage loss in investment value (Default: 0.2).
-
-        Returns:
-            (Decimal | None): If available, required stop price to monitor.
-        """
-
-        if len(self.open_trades) == 0:
-            # No open positions hence no stop price
-            return
-
-        entry_action = self.open_trades[0].entry_action
-        open_lots = []
-        entry_prices = []
-
-        # Extract entry_lots, entry_price, exit_lots from 'self.open_trades'
-        for open_trade in self.open_trades:
-            open_lots.append(open_trade.entry_lots - open_trade.exit_lots)
-            entry_prices.append(open_trade.entry_price)
-
-        # Compute total_investment
-        total_investment = sum(
-            entry_price * lots for entry_price, lots in zip(entry_prices, open_lots)
-        )
-
-        # Compute value after stipulated percent loss for long and short position
-        value_after_loss = (
-            total_investment * (1 - percent_loss)  # sell at lower price
-            if entry_action == "buy"
-            else total_investment * (1 + percent_loss)  # buy at higher price
-        )
-
-        # Compute stop price to meet stipulated percent loss
-        stop_price = value_after_loss / sum(open_lots)
-
-        return Decimal(str(round(stop_price, 2)))
+        return sum(trade.entry_lots - trade.exit_lots for trade in self.open_trades)

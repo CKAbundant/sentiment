@@ -61,28 +61,25 @@ class TradingStrategy:
         self.trades = trades
         self.percent_drawdown = percent_drawdown
 
-    def __call__(self, df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def __call__(self, df_ohlcv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Generate completed trades based on trading strategy i.e.
         combination of entry, profit exit and stop exit.
 
         Args:
-            df (pd.DataFrame): DataFrame without price action.
+            df_ohlcv (pd.DataFrame): DataFrame containing OHLCV data and TA (if any).
 
         Returns:
             df_trades (pd.DataFrame):
-                DataFrame containing completed trades info.
-            df_pa (pd.DataFrame):
-                DataFrame with price action (i.e. 'entry_signal', 'exit_signal').
+                DataFrame containing completed trades.
+            df_signals (pd.DataFrame):
+                DataFrame containing updated exit signals price-related stops.
         """
 
-        # Append 'entry_signal' column
-        df_pa = self.entry.gen_entry_signal(df)
-
-        if self.exit is not None:
-            # Append 'exit_signal' if 'self.exit' exist
-            df_pa = self.exit.gen_exit_signal(df_pa)
+        # Append entry and exit signal
+        df_pa = self.entry.gen_entry_signal(df_ohlcv)
+        df_signals = self.exit.gen_exit_signal(df_pa)
 
         # Generate trades
-        df_trades, df_pa = self.trades.gen_trades(df_pa)
+        df_trades, df_signals = self.trades.gen_trades(df_pa)
 
-        return df_trades, df_pa
+        return df_trades, df_signals

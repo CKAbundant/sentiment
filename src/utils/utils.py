@@ -389,9 +389,3 @@ def validate_literal(var: str, literal: Any, literal_name: str) -> str:
         )
 
     return var
-
-
-def get_net_pos(open_trades: deque[StockTrade]) -> int:
-    """Get net positions from 'self.open_trades'."""
-
-    return sum(trade.entry_lots - trade.exit_lots for trade in open_trades)
