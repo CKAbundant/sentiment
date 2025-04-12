@@ -8,7 +8,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from config.variables import PriceAction
+from config.variables import EXIT_PRICE_MAPPING, ExitMethod, PriceAction
+from src.utils import utils
 
 from .stock_trade import StockTrade
 
