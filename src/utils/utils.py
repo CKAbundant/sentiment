@@ -1,5 +1,6 @@
 """Generic helper functions"""
 
+import calendar
 import importlib
 import pickle
 import random
@@ -389,3 +390,12 @@ def validate_literal(var: str, literal: Any, literal_name: str) -> str:
         )
 
     return var
+
+
+def get_last_day_of_month(dt: datetime) -> datetime:
+    """Get datetime for last day of the month"""
+
+    __, last_day = calendar.monthrange(dt.year, dt.month)
+    last_date = datetime(dt.year, dt.month, last_day)
+
+    return last_date

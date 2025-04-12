@@ -135,11 +135,8 @@ class GenPriceAction:
 
             # Append 'is_holiday', 'ticker' and 'weekday'
             df_av = self.append_is_holiday(df_av)
-            df_av = self.append_dayname(df_av)
-            df_av.insert(0, "ticker", [ticker] * len(df_av))
-
-            # Append closing price of ticker
-            df_av = self.append_close(df_av, ticker)
+            df_av = (self.append_dayname(df_av),)
+            df_av.insert(0, "ticker", ticker)
 
             # Append closing price of top N co-integrated stocks with lowest pvalue
             results_list.append(self.gen_topn_close(df_av, df_coint_corr, ticker))
@@ -234,22 +231,6 @@ class GenPriceAction:
 
         # Append whether date is holiday
         df.insert(0, "is_holiday", [dt in holidays_since_2024 for dt in date_list])
-
-        return df
-
-    def append_close(self, df_av: pd.DataFrame, ticker: str) -> pd.DataFrame:
-        """Append closing price of stock ticker whose news are sentiment-rated."""
-
-        df = df_av.copy()
-
-        # Load OHLCV prices for ticker
-        ohlcv_path = f"{self.stock_dir}/{ticker}.parquet"
-        df_ohlcv = pd.read_parquet(ohlcv_path)
-        df_ohlcv.index = pd.to_datetime(df_ohlcv.index)
-        df.index = pd.to_datetime(df.index)
-
-        # Append closing price of 'ticker'
-        df[f"{ticker}_close"] = df_ohlcv.loc[df_ohlcv.index.isin(df.index), "Close"]
 
         return df
 
@@ -369,19 +350,32 @@ class GenPriceAction:
     ) -> pd.DataFrame:
         """Append OHLC data of cointegrated stocks."""
 
-        df = df_av.copy()
-
         # Load OHLCV prices for ticker
         ohlcv_path = f"{self.stock_dir}/{coint_corr_ticker}.parquet"
         df_ohlcv = pd.read_parquet(ohlcv_path)
 
         # Ensure both df.index and df_ohlcv are datetime objects
-        df.index = pd.to_datetime(df.index)
+        df_av.index = pd.to_datetime(df_av.index)
         df_ohlcv.index = pd.to_datetime(df_ohlcv.index)
 
-        # Append OHLC data to DataFrame
-        df[["coint_corr_ticker", "open", "high", "low", "close"]] = df_ohlcv.loc[
-            df_ohlcv.index.isin(df.index), ["Ticker", "Open", "High", "Low", "Close"]
+        # Get date of earliest and latest date in df_av
+        earliest_date = df_av.index.min()
+        latest_date = df_av.index.max()
+
+        # Get 1st day of the earliest month and last day of the latest month
+        start_date = earliest_date.replace(day=1)
+        end_date = utils.get_last_day_of_month(latest_date)
+
+        # Filter df_ohlcv based on start and end date
+        df_ohlcv = df_ohlcv.loc[
+            (df_ohlcv.index >= start_date) & (df_ohlcv.index <= end_date), :
         ]
+
+        # Perform left join of 'df_av' on 'df_ohlcv'
+        df = df_ohlcv.join(df_av)
+
+        # Rename column
+        df = df.rename(columns={"Ticker": "coint_corr_ticker"})
+        df.columns = [col.lower() for col in df.columns]
 
         return df
