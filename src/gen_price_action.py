@@ -32,10 +32,9 @@ from tqdm import tqdm
 
 from config.variables import COINT_CORR_FN, HF_MODEL
 from src.cal_coint_corr import CalCointCorr
-from src.strategy.base import TradingStrategy
+from src.strategy.base import GenTrades, TradingStrategy
 from src.strategy.entry.senti_entry import SentiEntry
 from src.strategy.exit.senti_exit import SentiExit
-from src.strategy.trade.senti_trades import GetTrades
 from src.utils import utils
 
 
@@ -133,24 +132,22 @@ class GenPriceAction:
             # Group by publication date and compute mean sentiment rating
             df_av = self.cal_mean_sentiment(df_ticker)
 
-            # Append 'is_holiday', 'ticker' and 'weekday'
-            df_av = self.append_is_holiday(df_av)
-            df_av = (self.append_dayname(df_av),)
+            # Append 'ticker' column
             df_av.insert(0, "ticker", ticker)
 
             # Append closing price of top N co-integrated stocks with lowest pvalue
             results_list.append(self.gen_topn_close(df_av, df_coint_corr, ticker))
 
-        # Combine list of DataFrame to a single DataFrame
-        df_results = pd.concat(results_list, axis=0).reset_index(drop=True)
+        # # Combine list of DataFrame to a single DataFrame
+        # df_results = pd.concat(results_list, axis=0).reset_index(drop=True)
 
-        # Create folder if not exist
-        utils.create_folder(self.model_dir)
+        # # Create folder if not exist
+        # utils.create_folder(self.model_dir)
 
-        # Save combined DataFrame
-        utils.save_csv(
-            df_results, f"{self.model_dir}/trade_results.csv", save_index=False
-        )
+        # # Save combined DataFrame
+        # utils.save_csv(
+        #     df_results, f"{self.model_dir}/trade_results.csv", save_index=False
+        # )
 
     def load_coint_corr(self) -> pd.DataFrame:
         """Load csv file containing cointegration and correlation info."""
@@ -207,8 +204,9 @@ class GenPriceAction:
         df["date"] = pd.to_datetime(df["date"])
 
         # Insert 'day' column and set 'date' as index
+        ticker_index = df.columns.get_loc("ticker")
         day_name = df["date"].dt.day_name()
-        df.insert(0, "day_name", day_name)
+        df.insert(ticker_index + 1, "day_name", day_name)
         df = df.set_index("date")
 
         return df
@@ -271,15 +269,15 @@ class GenPriceAction:
             # Generate and save DataFrame for each cointegrated stock
             df_coint_corr_ticker = self.append_coint_corr_ohlc(df, coint_corr_ticker)
 
-            # Load Sentiment Strategy (multiple + take_all)
-            senti_long_multi_all = TradingStrategy(
-                "long_only",
-                SentiEntry,
-                SentiExit,
-                GetTrades(),
-            )
-            df_trades, df_pa = senti_long_multi_all(df_coint_corr_ticker)
-            trades_list.append(df_trades)
+            # # Load Sentiment Strategy (multiple + take_all)
+            # senti_long_multi_all = TradingStrategy(
+            #     "long_only",
+            #     SentiEntry,
+            #     SentiExit,
+            #     GetTrades(),
+            # )
+            # df_trades, df_pa = senti_long_multi_all(df_coint_corr_ticker)
+            # trades_list.append(df_trades)
 
             # Create folder if not exist
             utils.create_folder(self.price_action_dir)
@@ -287,10 +285,11 @@ class GenPriceAction:
             # Save price action DataFrame as csv file
             file_name = f"{ticker}_{coint_corr_ticker}.csv"
             file_path = f"{self.price_action_dir}/{file_name}"
-            utils.save_csv(df_pa, file_path, save_index=True)
+            # utils.save_csv(df_pa, file_path, save_index=True)
+            utils.save_csv(df_coint_corr_ticker, file_path, save_index=True)
 
-        # Combine all trades DataFrame
-        return pd.concat(trades_list, axis=0).reset_index(drop=True)
+        # # Combine all trades DataFrame
+        # return pd.concat(trades_list, axis=0).reset_index(drop=True)
 
     def get_topn_tickers(
         self, ticker: str, df_coint_corr: pd.DataFrame
@@ -357,18 +356,17 @@ class GenPriceAction:
         # Ensure both df.index and df_ohlcv are datetime objects
         df_av.index = pd.to_datetime(df_av.index)
         df_ohlcv.index = pd.to_datetime(df_ohlcv.index)
+        df_ohlcv.index.name = df_ohlcv.index.name.lower()
 
         # Get date of earliest and latest date in df_av
         earliest_date = df_av.index.min()
-        latest_date = df_av.index.max()
 
         # Get 1st day of the earliest month and last day of the latest month
         start_date = earliest_date.replace(day=1)
-        end_date = utils.get_last_day_of_month(latest_date)
 
         # Filter df_ohlcv based on start and end date
         df_ohlcv = df_ohlcv.loc[
-            (df_ohlcv.index >= start_date) & (df_ohlcv.index <= end_date), :
+            (df_ohlcv.index >= start_date) & (df_ohlcv.index <= self.date), :
         ]
 
         # Perform left join of 'df_av' on 'df_ohlcv'
@@ -377,5 +375,14 @@ class GenPriceAction:
         # Rename column
         df = df.rename(columns={"Ticker": "coint_corr_ticker"})
         df.columns = [col.lower() for col in df.columns]
+
+        # Ensure no missing values at 'ticker' column
+        df["ticker"] = df["ticker"].ffill()
+
+        # Insert 'day_name' column just after 'ticker' column
+        df = self.append_dayname(df)
+
+        # Reset index and ensure 'date' column is on datetime type
+        df["date"] = pd.to_datetime(df["date"])
 
         return df

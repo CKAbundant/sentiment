@@ -73,10 +73,6 @@ class SentiTrades(GenTrades):
             trading strategy (Default: "./src/strategy").
         percent_loss (float):
             If provided, percentage loss allowed for investment.
-        percent_profit (float):
-            If provided, target percentage gain for investment.
-        percent_profit_trade (float):
-            If provided, target percentage gain for each trade.
         exit_method (ExitMethod):
             Exit method to generate stop price.
 
@@ -110,15 +106,11 @@ class SentiTrades(GenTrades):
         super().__init__(
             entry_struct, exit_struct, num_lots, req_cols, monitor_close, strategy_dir
         )
-        self.entry_struct = entry_struct
-        self.exit_struct = exit_struct
-        self.num_lots = num_lots
-        self.req_cols = req_cols
-        self.no_trades = []
 
         # Price-related stops
         self.percent_loss = percent_loss
         self.exit_method = exit_method
+        self.no_trades = []
 
     def gen_trades(self, df_senti: pd.DataFrame) -> pd.DataFrame:
         """Generate DataFrame containing completed trades for trading strategy."""
@@ -126,7 +118,7 @@ class SentiTrades(GenTrades):
         completed_list = []
 
         # Filter out null values for OHLC due to weekends and holiday
-        df = df_senti.loc[~df_senti["close"].isna(), self.req_cols].copy()
+        df = df_senti.loc[:, self.req_cols].copy()
 
         # Get news ticker and cointegrated/correlated ticker
         ticker = self.get_ticker(df_senti, "ticker")
@@ -135,12 +127,17 @@ class SentiTrades(GenTrades):
         for idx, dt, high, low, close, ent_sig, ex_sig in df.itertuples(
             index=True, name=None
         ):
+            print(f"idx : {idx}")
+            print(f"dt : {dt}")
+            print(f"close : {close}")
+            print(f"ent_sig : {ent_sig}")
+
             # Get net position
             net_pos = self.get_net_pos()
 
             # Close off all open positions at end of trading period
             if idx >= len(df) - 1 and net_pos != 0:
-                completed_list.extend(self.exit_all(open_trades, dt, ex_sig, close))
+                completed_list.extend(self.exit_all(dt, ex_sig, close))
 
                 # Skip creating new open positions after all open positions closed
                 continue
@@ -153,23 +150,25 @@ class SentiTrades(GenTrades):
 
             # Check to take profit
             if (ex_sig == "sell" or ex_sig == "buy") and net_pos != 0:
-                completed_list.extend(self.take_profit(open_trades, dt, ex_sig, close))
+                completed_list.extend(self.take_profit(dt, ex_sig, close))
 
             # Check to enter new position
             if ent_sig == "buy" or ent_sig == "sell":
-                open_trades = self.open_pos(
-                    open_trades, coint_corr_ticker, dt, ent_sig, close
-                )
+                self.open_pos(coint_corr_ticker, dt, ent_sig, close)
+
+            print(f"len(self.open_trades) : {len(self.open_trades)}")
+            print(f"net_pos : {net_pos}")
+            print(f"self.open_trades : {self.open_trades}\n")
 
         # No completed trades recorded
         if not completed_list:
             self.no_trades.append(ticker)
 
         # Append 'news_ticker' column to DataFrame generated from completed trades
-        df = pd.DataFrame(completed_list)
-        df.insert(0, "news_ticker", ticker)
+        df_trades = pd.DataFrame(completed_list)
+        df_trades.insert(0, "news_ticker", ticker)
 
-        return df
+        return df_trades, df_senti
 
     def stop_loss(
         self,

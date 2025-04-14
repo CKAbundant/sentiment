@@ -42,16 +42,16 @@ def main() -> None:
     print(f"exit_struct : {exit_struct}")
     print(f"num_lots : {num_lots}\n")
 
-    # Generate list of S&P500 stocks
-    snp500_list = utils.gen_snp500_list(URL, IGNORE_LIST)
+    # # Generate list of S&P500 stocks
+    # snp500_list = utils.gen_snp500_list(URL, IGNORE_LIST)
 
-    # Download OHLCV data for S&P500 stocks
-    download_ohlcv = DownloadOHLCV(snp500_list=snp500_list, end_date=date)
-    download_ohlcv.run()
+    # # Download OHLCV data for S&P500 stocks
+    # download_ohlcv = DownloadOHLCV(snp500_list=snp500_list, end_date=date)
+    # download_ohlcv.run()
 
-    # Perform cointegration and correlation analysis and save results as csv file
-    cal_coint_corr = CalCointCorr(snp500_list=snp500_list, date=date)
-    cal_coint_corr.run()
+    # # Perform cointegration and correlation analysis and save results as csv file
+    # cal_coint_corr = CalCointCorr(snp500_list=snp500_list, date=date)
+    # cal_coint_corr.run()
 
     # Generate price action
     hf_model = "ziweichen"

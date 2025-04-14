@@ -44,14 +44,22 @@ class StockTrade(BaseModel):
     @computed_field(description="Profit/loss when trade completed")
     def profit_loss(self) -> Decimal | None:
         if self.exit_price is not None and self.entry_price is not None:
-            profit_loss = self.exit_price - self.entry_price
+            profit_loss = (
+                self.exit_price - self.entry_price
+                if self.entry_action == "buy"
+                else self.entry_price - self.exit_price
+            )
             return profit_loss
         return
 
     @computed_field(description="Percentage return of trade")
     def percent_ret(self) -> Decimal | None:
-        if self.exit_price is not None and self.entry_price is not None:
-            percent_ret = (self.exit_price - self.entry_price) / self.entry_price
+        if (
+            self.exit_price is not None
+            and self.entry_price is not None
+            and self.profit_loss is not None
+        ):
+            percent_ret = self.profit_loss / self.entry_price
             return percent_ret.quantize(Decimal("1.000000"))
         return
 

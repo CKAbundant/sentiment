@@ -1,7 +1,7 @@
 """Abstract classes for generating completed trades."""
 
 from abc import ABC, abstractmethod
-from collections import deque
+from collections import Counter, deque
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -125,7 +125,9 @@ class GenTrades(ABC):
         )
 
         # Update 'self.open_trades' with new open position
-        self.open_trades = entry_instance.open_new_pos(ticker, dt, ent_sig, entry_price)
+        self.open_trades = entry_instance.open_new_pos(
+            self.open_trades, ticker, dt, ent_sig, entry_price
+        )
 
     def take_profit(
         self,
@@ -167,7 +169,6 @@ class GenTrades(ABC):
     def exit_all(
         self,
         dt: datetime,
-        ex_sig: PriceAction,
         exit_price: float,
     ) -> list[dict[str, Any]]:
         """Close all open positions via 'TakeAllExit.close_pos' method.
@@ -175,8 +176,6 @@ class GenTrades(ABC):
         Args:
             dt (datetime):
                 Trade datetime object.
-            ex_sig (PriceAction):
-                Action to close open position either "buy" or "sell".
             exit_price (float):
                 Exit price of stock ticker.
 
@@ -193,7 +192,7 @@ class GenTrades(ABC):
 
         # Update open trades and generate completed trades
         self.open_trades, completed_trades = take_all_exit.close_pos(
-            self.open_trades, dt, ex_sig, exit_price
+            self.open_trades, dt, exit_price
         )
 
         return completed_trades
@@ -201,4 +200,11 @@ class GenTrades(ABC):
     def get_net_pos(self) -> int:
         """Get net positions from 'self.open_trades'."""
 
-        return sum(trade.entry_lots - trade.exit_lots for trade in self.open_trades)
+        return sum(
+            (
+                trade.entry_lots - trade.exit_lots
+                if trade.entry_action == "buy"
+                else -(trade.entry_lots - trade.exit_lots)
+            )
+            for trade in self.open_trades
+        )

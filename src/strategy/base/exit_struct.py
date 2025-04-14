@@ -3,7 +3,7 @@ exit stuctures."""
 
 import math
 from abc import ABC, abstractmethod
-from collections import deque
+from collections import Counter, deque
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -35,7 +35,6 @@ class ExitStruct(ABC):
         self,
         open_trades: deque[StockTrade],
         dt: datetime,
-        ex_sig: PriceAction,
         exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
         """Update existing StockTrade objects (still open); and remove completed
@@ -46,8 +45,6 @@ class ExitStruct(ABC):
                 Deque list of StockTrade pydantic object to record open trades.
             dt (datetime):
                 Trade datetime object.
-            ex_sig (PriceAction):
-                Action to close open position either "buy" or "sell".
             exit_price (float):
                 Exit price of stock ticker.
 
@@ -64,7 +61,6 @@ class ExitStruct(ABC):
         self,
         trade: StockTrade,
         dt: datetime,
-        ex_sig: PriceAction,
         exit_price: float,
         exit_lots: int | None = None,
     ) -> StockTrade:
@@ -75,8 +71,6 @@ class ExitStruct(ABC):
                 Existing StockTrade object for open trade.
             dt (datetime):
                 Trade datetime object.
-            ex_sig (PriceAction):
-                Action to close open position either "buy" or "sell".
             exit_price (float):
                 Exit price of stock ticker.
             exit_lots (int | None):
@@ -88,11 +82,14 @@ class ExitStruct(ABC):
 
         # Set 'exit_lots' to be equal to 'entry_lots' if not provided
         exit_lots = exit_lots or trade.entry_lots
+
+        # Get exit action to update position
+        exit_action = "sell" if trade.entry_action == "buy" else "buy"
         updated_trade = trade.model_copy()
 
         try:
             updated_trade.exit_datetime = dt
-            updated_trade.exit_action = ex_sig
+            updated_trade.exit_action = exit_action
             updated_trade.exit_lots = exit_lots
             updated_trade.exit_price = Decimal(str(exit_price))
 
@@ -119,7 +116,7 @@ class ExitStruct(ABC):
 class FIFOExit(ExitStruct):
     """Take profit for earliest open trade. For example:
 
-    - Long stock at 50 (5 lots) -> 60 (3 lots) -> 70 (2 lots).
+    - Long stock at 50 (5 lots) -> 60 (3 lots) -> 70 2 lots).
     - Signal to take profit -> Sell 5 lots bought at 50 (i.e. FIFO).
     """
 
@@ -127,7 +124,6 @@ class FIFOExit(ExitStruct):
         self,
         open_trades: deque[StockTrade],
         dt: datetime,
-        ex_sig: PriceAction,
         exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
         """Update existing StockTrade objects (still open); and remove completed
@@ -138,8 +134,6 @@ class FIFOExit(ExitStruct):
                 Deque list of StockTrade pydantic object to record open trades.
             dt (datetime):
                 Trade datetime object.
-            ex_sig (PriceAction):
-                Action to close open position either "buy" or "sell".
             exit_price (float):
                 Exit price of stock ticker.
 
@@ -158,7 +152,7 @@ class FIFOExit(ExitStruct):
         earliest_trade = open_trades[0]
 
         # Update earliest StockTrade object
-        earliest_trade = self._update_pos(earliest_trade, dt, ex_sig, exit_price)
+        earliest_trade = self._update_pos(earliest_trade, dt, exit_price)
 
         # Convert StockTrade to dictionary only if all fields are populated
         # i.e. trade completed.
@@ -182,7 +176,6 @@ class LIFOExit(ExitStruct):
         self,
         open_trades: deque[StockTrade],
         dt: datetime,
-        ex_sig: PriceAction,
         exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
         """Update existing StockTrade objects (still open); and remove completed
@@ -193,8 +186,6 @@ class LIFOExit(ExitStruct):
                 Deque list of StockTrade pydantic object to record open trades.
             dt (datetime):
                 Trade datetime object.
-            ex_sig (PriceAction):
-                Action to close open position either "buy" or "sell".
             exit_price (float):
                 Exit price of stock ticker.
 
@@ -213,7 +204,7 @@ class LIFOExit(ExitStruct):
         latest_trades = open_trades[-1]
 
         # Update earliest StockTrade object
-        latest_trades = self._update_pos(latest_trades, dt, ex_sig, exit_price)
+        latest_trades = self._update_pos(latest_trades, dt, exit_price)
 
         # Convert StockTrade to dictionary only if all fields are populated
         # i.e. trade completed.
@@ -240,7 +231,6 @@ class HalfFIFOExit(ExitStruct):
         self,
         open_trades: deque[StockTrade],
         dt: datetime,
-        ex_sig: PriceAction,
         exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
         """Update existing StockTrade objects (still open); and remove completed
@@ -251,8 +241,6 @@ class HalfFIFOExit(ExitStruct):
                 Deque list of StockTrade pydantic object to record open trades.
             dt (datetime):
                 Trade datetime object.
-            ex_sig (PriceAction):
-                Action to close open position either "buy" or "sell".
             exit_price (float):
                 Exit price of stock ticker.
 
@@ -271,7 +259,7 @@ class HalfFIFOExit(ExitStruct):
             return open_trades, []
 
         # Get net position and half of net position from 'open_trades'
-        net_pos = self.get_net_pos(open_trades)
+        net_pos = self.get_net_abs_pos(open_trades)
         half_pos = math.ceil(abs(net_pos) / 2)
 
         for trade in open_trades:
@@ -284,7 +272,7 @@ class HalfFIFOExit(ExitStruct):
 
                 # Update StockTrade objects with exit info
                 trade = self._update_pos(
-                    trade, dt, ex_sig, exit_price, initial_exit_lots + lots_to_exit
+                    trade, dt, exit_price, initial_exit_lots + lots_to_exit
                 )
 
                 # Break loop if trade is not updated properly i.e.
@@ -325,7 +313,7 @@ class HalfFIFOExit(ExitStruct):
 
         return completed_trade.model_dump()
 
-    def get_net_pos(self, open_trades: deque[StockTrade]) -> int:
+    def get_net_abs_pos(self, open_trades: deque[StockTrade]) -> int:
         """Get net positions from 'self.open_trades'."""
 
         return sum(trade.entry_lots - trade.exit_lots for trade in open_trades)
@@ -345,7 +333,6 @@ class HalfLIFOExit(ExitStruct):
         self,
         open_trades: deque[StockTrade],
         dt: datetime,
-        ex_sig: PriceAction,
         exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
         """Update existing StockTrade objects (still open); and remove completed
@@ -356,8 +343,6 @@ class HalfLIFOExit(ExitStruct):
                 Deque list of StockTrade pydantic object to record open trades.
             dt (datetime):
                 Trade datetime object.
-            ex_sig (PriceAction):
-                Action to close open position either "buy" or "sell".
             exit_price (float):
                 Exit price of stock ticker.
 
@@ -380,7 +365,7 @@ class HalfLIFOExit(ExitStruct):
         reversed_open_trades = open_trades_list[::-1]
 
         # Get net position and half of net position from 'open_trades'
-        net_pos = self.get_net_pos(open_trades)
+        net_pos = self.get_net_abs_pos(open_trades)
         half_pos = math.ceil(abs(net_pos) / 2)
 
         for trade in reversed_open_trades:
@@ -393,7 +378,7 @@ class HalfLIFOExit(ExitStruct):
 
                 # Update StockTrade objects with exit info
                 trade = self._update_pos(
-                    trade, dt, ex_sig, exit_price, initial_exit_lots + lots_to_exit
+                    trade, dt, exit_price, initial_exit_lots + lots_to_exit
                 )
 
                 # Break loop if trade is not updated properly i.e.
@@ -434,7 +419,7 @@ class HalfLIFOExit(ExitStruct):
 
         return completed_trade.model_dump()
 
-    def get_net_pos(self, open_trades: deque[StockTrade]) -> int:
+    def get_net_abs_pos(self, open_trades: deque[StockTrade]) -> int:
         """Get net positions from 'self.open_trades'."""
 
         return sum(trade.entry_lots - trade.exit_lots for trade in open_trades)
@@ -447,7 +432,6 @@ class TakeAllExit(ExitStruct):
         self,
         open_trades: deque[StockTrade],
         dt: datetime,
-        ex_sig: PriceAction,
         exit_price: float,
     ) -> tuple[deque[StockTrade], list[dict[str, Any]]]:
         """Update existing StockTrade objects (still open); and remove completed
@@ -458,8 +442,6 @@ class TakeAllExit(ExitStruct):
                 Deque list of StockTrade pydantic object to record open trades.
             dt (datetime):
                 Trade datetime object.
-            ex_sig (PriceAction):
-                Action to close open position either "buy" or "sell".
             exit_price (float):
                 Exit price of stock ticker.
 
@@ -480,7 +462,7 @@ class TakeAllExit(ExitStruct):
             initial_exit_lots = trade.exit_lots
 
             # Update trade to close position
-            trade = self._update_pos(trade, dt, ex_sig, exit_price)
+            trade = self._update_pos(trade, dt, exit_price)
 
             # Break loop if trade is not updated properly i.e.
             # trade.exit_lots = initial_exit_lots

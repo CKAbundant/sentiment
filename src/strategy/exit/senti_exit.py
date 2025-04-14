@@ -14,32 +14,21 @@ class SentiExit(base.ExitSignal):
     Args:
         entry_type (EntryType):
             Either "long_only", "short_only", "long_or_short".
-        coint_corr_ticker (str):
-            Ticker for cointegrated/correlated ticker to news ticker.
         rating_col (str):
             Name of column containing sentiment rating to generate price action.
 
     Attributes:
-        entry_type (EntryType):
-            Either "long_only", "short_only", "long_or_short".
-        coint_corr_ticker (str):
-            Ticker for cointegrated/correlated ticker to news ticker.
         rating_col (str):
             Name of column containing sentiment rating to generate price action.
-        req_cols (list[str]):
-            List of columns that is required by the strategy.
     """
 
     def __init__(
         self,
         entry_type: EntryType,
-        coint_corr_ticker: str,
         rating_col: str = "median_rating_excl",
     ) -> None:
         super().__init__(entry_type)
-        self.coint_corr_ticker = coint_corr_ticker
         self.rating_col = rating_col
-        self.req_cols = ["close", rating_col, "entry_signal"]
 
     def gen_exit_signal(self, df_senti: pd.DataFrame) -> pd.DataFrame:
         """Append exit signal (i.e. 'buy', 'sell', 'wait') to DataFrame based
@@ -57,8 +46,10 @@ class SentiExit(base.ExitSignal):
 
         df = df_senti.copy()
 
-        if any(req_col not in df.columns for req_col in self.req_cols):
-            raise ValueError(f"Missing required columns : {self.req_cols}")
+        if any(col not in df.columns for col in [self.rating_col, "entry_signal"]):
+            raise ValueError(
+                f"'{self.rating_col}' or 'entry_signal' columns are not available!"
+            )
 
         # Ensure 'median_rating_excl' is integer type
         df[self.rating_col] = df[self.rating_col].astype(int)
@@ -90,7 +81,7 @@ class SentiExit(base.ExitSignal):
                 self._gen_exit_long_short_signal
             )
 
-        self._validate_exit_signal()
+        self._validate_exit_signal(df)
 
         return df
 

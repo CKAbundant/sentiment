@@ -320,9 +320,9 @@ def set_date_type(data: pd.DataFrame) -> pd.DataFrame:
         or (isinstance(col, tuple) and "date" in col[0].lower())
     ]
 
-    # Convert date to datetime.date type
+    # Convert date to datetime type
     for col in date_cols:
-        df[col] = pd.to_datetime(df[col]).dt.date
+        df[col] = pd.to_datetime(df[col])
 
     return df
 

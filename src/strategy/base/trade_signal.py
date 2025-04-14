@@ -59,9 +59,6 @@ class EntrySignal(TradeSignal, ABC):
         if "entry_signal" not in df.columns:
             raise ValueError(f"'entry_signal' column not found!")
 
-        if "entry_lots" not in df.columns:
-            raise ValueError(f"'entry_lots' column not found!")
-
         if self.entry_type == "long_only" and (df["entry_signal"] == "sell").any():
             raise ValueError("Long only strategy cannot generate sell entry signals")
 
@@ -94,5 +91,5 @@ class ExitSignal(TradeSignal, ABC):
         if self.entry_type == "long_only" and (df["exit_signal"] == "buy").any():
             raise ValueError("Long only strategy cannot generate buy exit signals.")
 
-        if self.entry_type == "short_only" and (df["exit_signal"] == "buy").any():
+        if self.entry_type == "short_only" and (df["exit_signal"] == "sell").any():
             raise ValueError("Short only strategy cannot generate sell exit signals.")

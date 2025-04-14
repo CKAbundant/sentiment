@@ -13,33 +13,21 @@ class SentiEntry(base.EntrySignal):
     Args:
         entry_type (EntryType):
             Either "long_only", "short_only", "long_or_short".
-        coint_corr_ticker (str):
-            Ticker for cointegrated/correlated ticker to news ticker.
         rating_col (str):
             Name of column containing sentiment rating to generate price action.
 
     Attributes:
-        entry_type (EntryType):
-            Either "long_only", "short_only", "long_or_short".
-        coint_corr_ticker (str):
-            Ticker for cointegrated/correlated ticker to news ticker.
         rating_col (str):
-            Name of column containing sentiment rating to generate price action.
-        req_cols (list[str]):
-            List of columns that is required by the strategy.
-
+            Name of column containing sentiment rating to generate price action
     """
 
     def __init__(
         self,
         entry_type: EntryType,
-        coint_corr_ticker: str,
         rating_col: str = "median_rating_excl",
     ) -> None:
         super().__init__(entry_type)
-        self.coint_corr_ticker = coint_corr_ticker
         self.rating_col = rating_col
-        self.req_cols = ["close", rating_col]
 
     def gen_entry_signal(self, df_senti: pd.DataFrame) -> pd.DataFrame:
         """Append entry signal (i.e. 'buy', 'sell', 'wait') to DataFrame based
@@ -57,22 +45,20 @@ class SentiEntry(base.EntrySignal):
 
         df = df_senti.copy()
 
-        if any(req_col not in df.columns for req_col in self.req_cols):
-            raise ValueError(f"Missing required columns : {self.req_cols}")
+        if self.rating_col not in df.columns:
+            raise ValueError(f"'{self.rating_col}' column is not available!")
 
         # Ensure 'median_rating_excl' is integer type
-        df["median_rating_excl"] = df["median_rating_excl"].astype(int)
+        df[self.rating_col] = df[self.rating_col].astype(int)
 
         if self.entry_type == "long_only":
-            df["entry_signal"] = df["median_rating_excl"].map(self._gen_long_signal)
+            df["entry_signal"] = df[self.rating_col].map(self._gen_long_signal)
 
         elif self.entry_type == "short_only":
-            df["entry_signal"] = df["median_rating_excl"].map(self._gen_short_signal)
+            df["entry_signal"] = df[self.rating_col].map(self._gen_short_signal)
 
         else:
-            df["entry_signal"] = df["median_rating_excl"].map(
-                self._gen_long_short_signal
-            )
+            df["entry_signal"] = df[self.rating_col].map(self._gen_long_short_signal)
 
         self._validate_entry_signal(df)
 
