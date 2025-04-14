@@ -7,6 +7,8 @@ from collections import Counter, deque
 from datetime import datetime
 from decimal import Decimal
 
+from pydantic import ValidationError
+
 from config.variables import PriceAction
 
 from .stock_trade import StockTrade
@@ -18,11 +20,11 @@ class EntryStruct(ABC):
 
     Args:
         num_lots (int):
-            Default number of lots to enter each time.
+            Default number of lots to enter each time (Default: 1).
 
     Attributes:
         num_lots (int):
-            Default number of lots to enter each time.
+            Default number of lots to enter each time (Default: 1).
     """
 
     def __init__(self, num_lots: int) -> None:
@@ -85,18 +87,23 @@ class EntryStruct(ABC):
                 If provided, entry lots to enter for 'MultiHalfEntry' entry structure.
 
         Returns:
-            (StockTrade): Newly created StockTrade object.
+            (StockTrade | None): If available, newly created StockTrade object.
         """
 
         entry_lots = entry_lots or self.num_lots
 
-        return StockTrade(
-            ticker=self._validate_ticker(open_trades, ticker),
-            entry_datetime=self._validate_entry_datetime(open_trades, dt),
-            entry_action=self._validate_entry_action(open_trades, ent_sig),
-            entry_lots=Decimal(str(entry_lots)),
-            entry_price=Decimal(str(entry_price)),
-        )
+        try:
+            return StockTrade(
+                ticker=self._validate_ticker(open_trades, ticker),
+                entry_datetime=self._validate_entry_datetime(open_trades, dt),
+                entry_action=self._validate_entry_action(open_trades, ent_sig),
+                entry_lots=Decimal(str(entry_lots)),
+                entry_price=Decimal(str(entry_price)),
+            )
+
+        except ValidationError as e:
+            print(f"Validation Error: {e}")
+            return
 
     def _validate_ticker(self, open_trades: deque[StockTrade], ticker: str) -> str:
         """Validate ticker is the same for all StockTrade objects in 'open_trades.
@@ -241,18 +248,7 @@ class MultiEntry(EntryStruct):
         >>> ent_sig = "buy"
         >>> multi_entry = MultiEntry(num_lots=1)
         >>> open_trades = multi_entry.open_new_pos(open_trades, ticker, dt, entry_price, ent_sig)
-
-    Args:
-        num_lots (int):
-            Default number of lots to enter each time (Default: 1).
-
-    Attributes:
-        num_lots (int):
-            Default number of lots to enter each time (Default: 1).
     """
-
-    def __init__(self, num_lots: int = 1) -> None:
-        super().__init__(num_lots)
 
     def open_new_pos(
         self,
@@ -284,7 +280,13 @@ class MultiEntry(EntryStruct):
 
         # Create StockTrade object to record new long/short position
         # based on 'ent_sig'
-        stock_trade = self._create_new(open_trades, ticker, dt, ent_sig, entry_price)
+        if not (
+            stock_trade := self._create_new(
+                open_trades, ticker, dt, ent_sig, entry_price
+            )
+        ):
+            return open_trades
+
         open_trades.append(stock_trade)
         self._validate_open_trades(open_trades)
 
@@ -308,18 +310,7 @@ class MultiHalfEntry(EntryStruct):
         >>> ent_sig = "buy"
         >>> multi_entry = MultiHalfEntry(num_lots=1)
         >>> open_trades = multi_entry.open_new_pos(open_trades, ticker, dt, entry_price, ent_sig)
-
-    Args:
-        num_lots (int):
-            Default number of lots to enter each time (Default: 1).
-
-    Attributes:
-        num_lots (int):
-            Default number of lots to enter each time (Default: 1).
     """
-
-    def __init__(self, num_lots: int = 1) -> None:
-        super().__init__(num_lots)
 
     def open_new_pos(
         self,
@@ -354,11 +345,11 @@ class MultiHalfEntry(EntryStruct):
 
         # Create StockTrade object to record new long/short position
         # based on 'ent_sig'
-        stock_trade = self._create_new(
+        if stock_trade := self._create_new(
             open_trades, ticker, dt, ent_sig, entry_price, entry_lots
-        )
-        open_trades.append(stock_trade)
-        self._validate_open_trades(open_trades)
+        ):
+            open_trades.append(stock_trade)
+            self._validate_open_trades(open_trades)
 
         return open_trades
 
@@ -387,18 +378,7 @@ class SingleEntry(EntryStruct):
         >>> ent_sig = "buy"
         >>> single_entry = SingleEntry(num_lots=1)
         >>> open_trades = single_entry.open_new_pos(open_trades, ticker, dt, entry_price, ent_sig)
-
-    Args:
-        num_lots (int):
-            Default number of lots to enter each time (Default: 1).
-
-    Attributes:
-        num_lots (int):
-            Default number of lots to enter each time (Default: 1).
     """
-
-    def __init__(self, num_lots: int = 1) -> None:
-        super().__init__(num_lots)
 
     def open_new_pos(
         self,
@@ -434,8 +414,10 @@ class SingleEntry(EntryStruct):
 
         # Create StockTrade object to record new long/short position
         # based on 'ent_sig'
-        stock_trade = self._create_new(open_trades, ticker, dt, ent_sig, entry_price)
-        open_trades.append(stock_trade)
-        self._validate_open_trades(open_trades)
+        if stock_trade := self._create_new(
+            open_trades, ticker, dt, ent_sig, entry_price
+        ):
+            open_trades.append(stock_trade)
+            self._validate_open_trades(open_trades)
 
         return open_trades

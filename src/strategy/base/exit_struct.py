@@ -8,6 +8,8 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
+from pydantic import ValidationError
+
 from config.variables import EXIT_PRICE_MAPPING, ExitMethod, PriceAction
 from src.utils import utils
 
@@ -81,21 +83,24 @@ class ExitStruct(ABC):
                 If provided, number of lot to exit open position.
 
         Returns:
-            open_trades (deque[StockTrade]):
-                Updated deque list of 'StockTrade' objects.
-            completed_trades (list[dict[str, Any]]):
-                List of dictionary containing required fields to generate DataFrame.
+            (StockTrade): StockTrade object updated with exit info
         """
 
         # Set 'exit_lots' to be equal to 'entry_lots' if not provided
         exit_lots = exit_lots or trade.entry_lots
+        updated_trade = trade.model_copy()
 
-        trade.exit_datetime = dt
-        trade.exit_action = ex_sig
-        trade.exit_lots = exit_lots
-        trade.exit_price = Decimal(str(exit_price))
+        try:
+            updated_trade.exit_datetime = dt
+            updated_trade.exit_action = ex_sig
+            updated_trade.exit_lots = exit_lots
+            updated_trade.exit_price = Decimal(str(exit_price))
 
-        return trade
+            return updated_trade
+
+        except ValidationError as e:
+            print(f"Validation Error : {e}")
+            return trade
 
     def _validate_completed_trades(self, stock_trade: StockTrade) -> bool:
         """Validate whether StockTrade object is properly updated with no null values."""
@@ -150,17 +155,18 @@ class FIFOExit(ExitStruct):
             return open_trades, []
 
         completed_trades = []
-
-        # Remove earliest StockTrade object from non-empty queue
-        trade = open_trades.popleft()
+        earliest_trade = open_trades[0]
 
         # Update earliest StockTrade object
-        trade = self._update_pos(trade, dt, ex_sig, exit_price)
+        earliest_trade = self._update_pos(earliest_trade, dt, ex_sig, exit_price)
 
         # Convert StockTrade to dictionary only if all fields are populated
         # i.e. trade completed.
-        if self._validate_completed_trades(trade):
-            completed_trades.append(trade.model_dump())
+        if self._validate_completed_trades(earliest_trade):
+            # Remove earliest StockTrade object since it is completed
+            open_trades.popleft()
+
+            completed_trades.append(earliest_trade.model_dump())
 
         return open_trades, completed_trades
 
@@ -204,17 +210,18 @@ class LIFOExit(ExitStruct):
             return open_trades, []
 
         completed_trades = []
-
-        # Remove earliest StockTrade object from non-empty queue
-        trade = open_trades.pop()
+        latest_trades = open_trades[-1]
 
         # Update earliest StockTrade object
-        trade = self._update_pos(trade, dt, ex_sig, exit_price)
+        latest_trades = self._update_pos(latest_trades, dt, ex_sig, exit_price)
 
         # Convert StockTrade to dictionary only if all fields are populated
         # i.e. trade completed.
-        if self._validate_completed_trades(trade):
-            completed_trades.append(trade.model_dump())
+        if self._validate_completed_trades(latest_trades):
+            # Remove latest StockTrade object from 'open_trades'
+            open_trades.pop()
+
+            completed_trades.append(latest_trades.model_dump())
 
         return open_trades, completed_trades
 
@@ -268,15 +275,22 @@ class HalfFIFOExit(ExitStruct):
         half_pos = math.ceil(abs(net_pos) / 2)
 
         for trade in open_trades:
+            initial_exit_lots = trade.exit_lots
+
             # Update trade only if haven't reach half of net position
             if half_pos > 0:
                 # Determine quantity to close based on 'half_pos'
-                lots_to_exit = min(half_pos, trade.entry_lots - trade.exit_lots)
+                lots_to_exit = min(half_pos, trade.entry_lots - initial_exit_lots)
 
                 # Update StockTrade objects with exit info
                 trade = self._update_pos(
-                    trade, dt, ex_sig, exit_price, trade.exit_lots + lots_to_exit
+                    trade, dt, ex_sig, exit_price, initial_exit_lots + lots_to_exit
                 )
+
+                # Break loop if trade is not updated properly i.e.
+                # trade.exit_lots = initial_exit_lots
+                if trade.exit_lots == initial_exit_lots:
+                    return open_trades, []
 
                 # Only update 'new_open_trades' if trades are still partially closed
                 if not self._validate_completed_trades(trade):
@@ -370,19 +384,26 @@ class HalfLIFOExit(ExitStruct):
         half_pos = math.ceil(abs(net_pos) / 2)
 
         for trade in reversed_open_trades:
+            initial_exit_lots = trade.exit_lots
+
             # Update trade only if haven't reach half of net position
             if half_pos > 0:
                 # Determine quantity to close based on 'half_pos'
-                lots_to_exit = min(half_pos, trade.entry_lots - trade.exit_lots)
+                lots_to_exit = min(half_pos, trade.entry_lots - initial_exit_lots)
 
                 # Update StockTrade objects with exit info
                 trade = self._update_pos(
-                    trade, dt, ex_sig, exit_price, trade.exit_lots + lots_to_exit
+                    trade, dt, ex_sig, exit_price, initial_exit_lots + lots_to_exit
                 )
+
+                # Break loop if trade is not updated properly i.e.
+                # trade.exit_lots = initial_exit_lots
+                if trade.exit_lots == initial_exit_lots:
+                    return open_trades, []
 
                 # Only update 'new_open_trades' if trades are still partially closed
                 if not self._validate_completed_trades(trade):
-                    new_open_trades.appendleft(trade)
+                    new_open_trades.append(trade)
 
                 completed_trades.append(self._gen_completed_trade(trade, lots_to_exit))
 
@@ -457,7 +478,10 @@ class TakeAllExit(ExitStruct):
 
         for trade in open_trades:
             # Update trade to close position
-            trade = self._update_pos(trade, dt, ex_sig, exit_price)
+            if not (trade := self._update_pos(trade, dt, ex_sig, exit_price)):
+                # Return original 'open_trades' and empty completed trades list
+                # if trade is None i.e. ValidationError
+                return open_trades, []
 
             # Convert StockTrade to dictionary only if all fields are populated
             # i.e. trade completed.

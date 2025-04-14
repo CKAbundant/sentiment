@@ -38,6 +38,6 @@ STRUCT_MAPPING = {
 }
 
 EXIT_PRICE_MAPPING = {
-    "".join([meth.title() for meth in method.split("_")])
+    method: "".join([meth.title() for meth in method.split("_")])
     for method in get_args(StopMethod)
 }

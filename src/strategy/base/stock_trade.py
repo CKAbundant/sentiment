@@ -57,9 +57,13 @@ class StockTrade(BaseModel):
 
     @computed_field(description="daily percentage return of trade")
     def daily_ret(self) -> Decimal | None:
-        if self.percent_ret is not None and self.days_held is not None:
+        if self.percent_ret is not None and self.days_held != 0:
             daily_ret = (1 + self.percent_ret) ** (1 / Decimal(str(self.days_held))) - 1
             return daily_ret.quantize(Decimal("1.000000"))
+
+        if self.percent_ret is not None and self.days_held == 0:
+            # daily return = percent return if closed within same day
+            return self.percent_ret
         return
 
     @computed_field(description="Whether trade is profitable")

@@ -18,12 +18,12 @@ class CalExitPrice(ABC):
             Percentage loss allowed for investment (Default: 0.2).
 
     Attributes:
-        percent_loss (float):
+        percent_loss (Decimal):
             Percentage loss allowed for investment (Default: 0.2).
     """
 
     def __init__(self, percent_loss: float = 0.2) -> None:
-        self.percent_loss = percent_loss
+        self.percent_loss = Decimal(str(percent_loss))
 
     @abstractmethod
     def cal_exit_price(self, open_trades: deque[StockTrade]) -> Decimal:
@@ -57,18 +57,7 @@ class PercentLoss(CalExitPrice):
     - Long 50 (5 lots), 60 (3 lots), 70 (2 lots).
     - If percentage loss is 20%, then stop price = 57
     - 57 * 8 (total lots) = 352 = 80% of total investment of 570
-
-    Args:
-        percent_loss (float):
-            Percentage loss allowed for investment (Default: 0.2).
-
-    Attributes:
-        percent_loss (float):
-            Percentage loss allowed for investment (Default: 0.2).
     """
-
-    def __init__(self, percent_loss: float = 0.2) -> None:
-        super().__init__(percent_loss)
 
     def cal_exit_price(self, open_trades: deque[StockTrade]) -> Decimal:
         """Calculate stop price to meet percent loss for total investment.
@@ -80,9 +69,6 @@ class PercentLoss(CalExitPrice):
         Returns:
             (Decimal): Exit price for all multiple open positions.
         """
-
-        if len(open_trades) == 0:
-            raise ValueError(f"'open_trades' cannot be empty.")
 
         entry_action = self.get_entry_action(open_trades)
 
@@ -102,7 +88,7 @@ class PercentLoss(CalExitPrice):
             else cur_invest * (1 + self.percent_loss) / total_open
         )
 
-        return Decimal(round(stop_price, 2))
+        return round(stop_price, 2)
 
     def get_net_pos(self, open_trades: deque[StockTrade]) -> int:
         """Get net positions from 'self.open_trades'."""
@@ -117,18 +103,7 @@ class LatestLoss(CalExitPrice):
     - Long 50 (5 lots), 60 (3 lots), 70 (2 lots)
     - latest trade = 70 (2 lots)
     - If percentage loss is 20%, then stop price = 0.8 * 70 = 56
-
-    Args:
-        percent_loss (float):
-            Percentage loss allowed for investment (Default: 0.2).
-
-    Attributes:
-        percent_loss (float):
-            Percentage loss allowed for investment (Default: 0.2).
     """
-
-    def __init__(self, percent_loss: float = 0.2) -> None:
-        super().__init__(percent_loss)
 
     def cal_exit_price(self, open_trades: deque[StockTrade]) -> Decimal:
         """Calculate stop price based on latest open position.
@@ -165,18 +140,7 @@ class NearestLoss(CalExitPrice):
     - Long 50 (5 lots),  70 (2 lots), 60 (3 lots)
     - Closest stop price for each position = [40, 56, 48]
     - Nearest stop price to current close = 56
-
-    Args:
-        percent_loss (float):
-            Percentage loss allowed for investment (Default: 0.2).
-
-    Attributes:
-        percent_loss (float):
-            Percentage loss allowed for investment (Default: 0.2).
     """
-
-    def __init__(self, percent_loss: float = 0.2) -> None:
-        super().__init__(percent_loss)
 
     def cal_exit_price(self, open_trades: deque[StockTrade]) -> Decimal:
         """Use highest stop price for long position and lowest stop price
