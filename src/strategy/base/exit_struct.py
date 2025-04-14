@@ -268,7 +268,7 @@ class HalfFIFOExit(ExitStruct):
 
         if len(open_trades) == 0:
             # No open trades to close
-            return new_open_trades, completed_trades
+            return open_trades, []
 
         # Get net position and half of net position from 'open_trades'
         net_pos = self.get_net_pos(open_trades)
@@ -373,7 +373,7 @@ class HalfLIFOExit(ExitStruct):
 
         if len(open_trades) == 0:
             # No open trades to close
-            return new_open_trades, completed_trades
+            return open_trades, []
 
         # Reverse copy of 'self.open_trades'
         open_trades_list = list(open_trades)
@@ -477,8 +477,14 @@ class TakeAllExit(ExitStruct):
         completed_trades = []
 
         for trade in open_trades:
+            initial_exit_lots = trade.exit_lots
+
             # Update trade to close position
-            if not (trade := self._update_pos(trade, dt, ex_sig, exit_price)):
+            trade = self._update_pos(trade, dt, ex_sig, exit_price)
+
+            # Break loop if trade is not updated properly i.e.
+            # trade.exit_lots = initial_exit_lots
+            if trade.exit_lots == initial_exit_lots:
                 # Return original 'open_trades' and empty completed trades list
                 # if trade is None i.e. ValidationError
                 return open_trades, []

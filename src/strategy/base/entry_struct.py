@@ -357,11 +357,11 @@ class MultiHalfEntry(EntryStruct):
         """Get half of latest StockTrade object in 'open_trades' till
         minimum 1 lot."""
 
-        latest_entry_lots = (
-            open_trades[-1].entry_lots if len(open_trades) > 0 else self.num_lots
+        return (
+            math.ceil(open_trades[-1].entry_lots / 2)
+            if len(open_trades) > 0
+            else self.num_lots
         )
-
-        return math.ceil(latest_entry_lots / 2)
 
 
 class SingleEntry(EntryStruct):
