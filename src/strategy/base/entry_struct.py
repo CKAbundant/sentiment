@@ -3,13 +3,14 @@ entry stuctures."""
 
 import math
 from abc import ABC, abstractmethod
-from collections import Counter, deque
+from collections import deque
 from datetime import datetime
 from decimal import Decimal
 
 from pydantic import ValidationError
 
 from config.variables import PriceAction
+from src.utils.utils import get_std_field
 
 from .stock_trade import StockTrade
 
@@ -210,20 +211,12 @@ class EntryStruct(ABC):
                 "'open_trades' is still empty after creating new position."
             )
 
-        # Get Counter for ticker and entry_action in 'open_trades'
-        ticker_counter = Counter([trade.ticker for trade in open_trades])
-        action_counter = Counter([trade.entry_action for trade in open_trades])
+        # Validate 'ticker' and 'entry_action' fields are consistent
+        get_std_field(open_trades, "ticker")
+        get_std_field(open_trades, "entry_action")
 
-        if len(action_counter) > 1:
-            raise ValueError(
-                "'entry_action' field is not the same for all open trades."
-            )
-
-        if len(ticker_counter) > 1:
-            raise ValueError("'ticker' field is not the same for all open trades.")
-
+        # Validate all entry_datetime are in ascending order
         entry_dates = [trade.entry_datetime for trade in open_trades]
-
         if any(
             entry_dates[idx] > entry_dates[idx + 1]
             for idx in range(len(entry_dates) - 1)

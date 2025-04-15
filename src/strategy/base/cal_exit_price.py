@@ -7,6 +7,7 @@ from collections import Counter, deque
 from decimal import Decimal
 
 from src.strategy.base.stock_trade import StockTrade
+from src.utils.utils import get_std_field
 
 
 class CalExitPrice(ABC):
@@ -39,16 +40,6 @@ class CalExitPrice(ABC):
 
         pass
 
-    def get_entry_action(self, open_trades: deque[StockTrade]) -> str:
-        """Get 'entry_action' from 'open_trades'."""
-
-        action_counter = Counter([trade.entry_action for trade in open_trades])
-
-        if len(action_counter) > 1:
-            raise ValueError("Entry action is not consistent.")
-
-        return list(action_counter.keys())[0]
-
 
 class PercentLoss(CalExitPrice):
     """Compute stop price such that total loss for all open positions
@@ -70,7 +61,7 @@ class PercentLoss(CalExitPrice):
             (Decimal): Exit price for all multiple open positions.
         """
 
-        entry_action = self.get_entry_action(open_trades)
+        entry_action = get_std_field(open_trades, entry_action)
 
         # Current investment = investment value of current open positions
         cur_invest = sum(
@@ -120,7 +111,7 @@ class LatestLoss(CalExitPrice):
             raise ValueError(f"'open_trades' cannot be empty.")
 
         # Get entry action and latest entry price
-        entry_action = self.get_entry_action(open_trades)
+        entry_action = get_std_field(open_trades, "entry_action")
         latest_price = open_trades[-1].entry_price
 
         # Compute stop price to meet stipulated percent loss
@@ -158,7 +149,7 @@ class NearestLoss(CalExitPrice):
             raise ValueError(f"'open_trades' cannot be empty.")
 
         # Get entry action
-        entry_action = self.get_entry_action(open_trades)
+        entry_action = get_std_field(open_trades, "entry_action")
 
         # Generate list of stop price for each open position
         stop_list = [

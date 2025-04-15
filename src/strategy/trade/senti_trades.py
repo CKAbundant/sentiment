@@ -29,7 +29,7 @@ taken ('half_life' profit).
 unless specified otherwise.
 """
 
-from collections import Counter, deque
+from collections import Counter
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -37,8 +37,8 @@ from typing import Any
 import pandas as pd
 
 from config.variables import EXIT_PRICE_MAPPING, EntryMethod, ExitMethod, PriceAction
-from src.strategy.base import GenTrades, StockTrade
-from src.utils import utils
+from src.strategy.base import GenTrades
+from src.utils.utils import get_class_instance, get_std_field
 
 
 class SentiTrades(GenTrades):
@@ -152,7 +152,7 @@ class SentiTrades(GenTrades):
 
             # Check to take profit
             if (ex_sig == "sell" or ex_sig == "buy") and net_pos != 0:
-                completed_list.extend(self.take_profit(dt, close))
+                completed_list.extend(self.take_profit(dt, ex_sig, close))
 
             # Check to enter new position
             if ent_sig == "buy" or ent_sig == "sell":
@@ -203,7 +203,7 @@ class SentiTrades(GenTrades):
         # Compute stop loss price based on 'self.exit_method'
         stop_price = self.cal_stop_price()
 
-        entry_action = self.get_entry_action(self.open_trades)
+        entry_action = get_std_field(self.open_trades, "entry_action")
         exit_action = "sell" if entry_action == "buy" else "buy"
 
         cond_list = [
@@ -234,7 +234,7 @@ class SentiTrades(GenTrades):
         calexitprice_path = f"{self.strategy_dir}/base/cal_exit_price.py"
 
         # Get initialized instance of concrete class implementation
-        class_inst = utils.get_class_instance(
+        class_inst = get_class_instance(
             class_name, calexitprice_path, percent_loss=self.percent_loss
         )
 
@@ -259,13 +259,3 @@ class SentiTrades(GenTrades):
             )
 
         return list(ticker_counter.keys())[0]
-
-    def get_entry_action(self) -> str:
-        """Get 'entry_action' from 'open_trades'."""
-
-        action_counter = Counter([trade.entry_action for trade in self.open_trades])
-
-        if len(action_counter) > 1:
-            raise ValueError("Entry action is not consistent.")
-
-        return list(action_counter.keys())[0]

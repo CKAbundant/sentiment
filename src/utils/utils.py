@@ -8,13 +8,13 @@ from collections import Counter, deque
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Literal, Type, TypeVar, get_args, get_origin
+from typing import TYPE_CHECKING, Any, Literal, Type, TypeVar, get_args, get_origin
 
 import numpy as np
 import pandas as pd
 
-from config.variables import EntryType
-from src.strategy.base.stock_trade import StockTrade
+if TYPE_CHECKING:
+    from src.strategy.base.stock_trade import StockTrade
 
 # Create generic type variable 'T'
 T = TypeVar("T")
@@ -399,3 +399,14 @@ def get_last_day_of_month(dt: datetime) -> datetime:
     last_date = datetime(dt.year, dt.month, last_day)
 
     return last_date
+
+
+def get_std_field(open_trades: deque["StockTrade"], std_field: str) -> str:
+    """Get standard field (i.e. 'ticker' or 'entry_action') from 'open_trades'."""
+
+    counter = Counter([getattr(trade, std_field) for trade in open_trades])
+
+    if len(counter) > 1:
+        raise ValueError(f"'{std_field}' field is not consistent.")
+
+    return list(counter.keys())[0]
