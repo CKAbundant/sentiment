@@ -383,6 +383,7 @@ class GenPriceAction:
         df = self.append_dayname(df)
 
         # Reset index and ensure 'date' column is on datetime type
+        df = df.reset_index()
         df["date"] = pd.to_datetime(df["date"])
 
         return df
