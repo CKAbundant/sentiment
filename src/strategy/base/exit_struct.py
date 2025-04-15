@@ -259,7 +259,7 @@ class HalfFIFOExit(ExitStruct):
             return open_trades, []
 
         # Get net position and half of net position from 'open_trades'
-        net_pos = self.get_net_abs_pos(open_trades)
+        net_pos = self.get_net_pos(open_trades)
         half_pos = math.ceil(abs(net_pos) / 2)
 
         for trade in open_trades:
@@ -314,11 +314,6 @@ class HalfFIFOExit(ExitStruct):
 
         return completed_trade.model_dump()
 
-    def get_net_abs_pos(self, open_trades: deque[StockTrade]) -> int:
-        """Get net positions from 'self.open_trades'."""
-
-        return sum(trade.entry_lots - trade.exit_lots for trade in open_trades)
-
 
 class HalfLIFOExit(ExitStruct):
     """keep taking profit by exiting half of latest positions . For example:
@@ -366,7 +361,7 @@ class HalfLIFOExit(ExitStruct):
         reversed_open_trades = open_trades_list[::-1]
 
         # Get net position and half of net position from 'open_trades'
-        net_pos = self.get_net_abs_pos(open_trades)
+        net_pos = self.get_net_pos(open_trades)
         half_pos = math.ceil(abs(net_pos) / 2)
 
         for trade in reversed_open_trades:
@@ -420,11 +415,6 @@ class HalfLIFOExit(ExitStruct):
             raise ValueError("Completed trades not properly closed.")
 
         return completed_trade.model_dump()
-
-    def get_net_abs_pos(self, open_trades: deque[StockTrade]) -> int:
-        """Get net positions from 'self.open_trades'."""
-
-        return sum(trade.entry_lots - trade.exit_lots for trade in open_trades)
 
 
 class TakeAllExit(ExitStruct):
