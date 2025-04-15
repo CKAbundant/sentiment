@@ -11,7 +11,6 @@ from typing import Any
 from pydantic import ValidationError
 
 from config.variables import EXIT_PRICE_MAPPING, ExitMethod, PriceAction
-from src.utils import utils
 
 from .stock_trade import StockTrade
 
@@ -314,6 +313,18 @@ class HalfFIFOExit(ExitStruct):
 
         return completed_trade.model_dump()
 
+    def get_net_pos(self, open_trades: deque[StockTrade]) -> int:
+        """Get net positions from 'open_trades'."""
+
+        return sum(
+            (
+                trade.entry_lots - trade.exit_lots
+                if trade.entry_action == "buy"
+                else -(trade.entry_lots - trade.exit_lots)
+            )
+            for trade in open_trades
+        )
+
 
 class HalfLIFOExit(ExitStruct):
     """keep taking profit by exiting half of latest positions . For example:
@@ -415,6 +426,18 @@ class HalfLIFOExit(ExitStruct):
             raise ValueError("Completed trades not properly closed.")
 
         return completed_trade.model_dump()
+
+    def get_net_pos(self, open_trades: deque[StockTrade]) -> int:
+        """Get net positions from 'open_trades'."""
+
+        return sum(
+            (
+                trade.entry_lots - trade.exit_lots
+                if trade.entry_action == "buy"
+                else -(trade.entry_lots - trade.exit_lots)
+            )
+            for trade in open_trades
+        )
 
 
 class TakeAllExit(ExitStruct):

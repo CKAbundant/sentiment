@@ -355,7 +355,7 @@ class MultiHalfEntry(EntryStruct):
         minimum 1 lot."""
 
         return (
-            math.ceil(open_trades[-1].entry_lots / 2)
+            math.ceil((open_trades[-1].entry_lots - open_trades[-1].exit_lots) / 2)
             if len(open_trades) > 0
             else self.num_lots
         )
