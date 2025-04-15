@@ -80,7 +80,7 @@ class ExitStruct(ABC):
             (StockTrade): StockTrade object updated with exit info
         """
 
-        # Set 'exit_lots' to be equal to 'entry_lots' if not provided
+        # set exit_lots to be net entry and exit lots to ensure
         exit_lots = exit_lots or trade.entry_lots
 
         # Get exit action to update position
@@ -284,6 +284,7 @@ class HalfFIFOExit(ExitStruct):
                 if not self._validate_completed_trades(trade):
                     new_open_trades.append(trade)
 
+                # Create completed trades using 'lots_to_exit'
                 completed_trades.append(self._gen_completed_trade(trade, lots_to_exit))
 
                 # Update remaining positions required to be closed and net position
@@ -304,7 +305,7 @@ class HalfFIFOExit(ExitStruct):
         # Create a shallow copy of the updated trade
         completed_trade = trade.model_copy()
 
-        # Update the 'entry_lots' to be same as 'lots_to_exit'
+        # Update the 'entry_lots' and 'exit_lots' to be same as 'lots_to_exit'
         completed_trade.entry_lots = lots_to_exit
         completed_trade.exit_lots = lots_to_exit
 
@@ -390,6 +391,7 @@ class HalfLIFOExit(ExitStruct):
                 if not self._validate_completed_trades(trade):
                     new_open_trades.append(trade)
 
+                # Create completed trades using 'lots_to_exit'
                 completed_trades.append(self._gen_completed_trade(trade, lots_to_exit))
 
                 # Update remaining positions required to be closed and net position
@@ -410,7 +412,7 @@ class HalfLIFOExit(ExitStruct):
         # Create a shallow copy of the updated trade
         completed_trade = trade.model_copy()
 
-        # Update the 'entry_lots' to be same as 'lots_to_exit'
+        # Update the 'entry_lots' and 'exit_lots' to be same as 'lots_to_exit'
         completed_trade.entry_lots = lots_to_exit
         completed_trade.exit_lots = lots_to_exit
 
@@ -461,7 +463,7 @@ class TakeAllExit(ExitStruct):
         for trade in open_trades:
             initial_exit_lots = trade.exit_lots
 
-            # Update trade to close position
+            # Update to close open position
             trade = self._update_pos(trade, dt, exit_price)
 
             # Break loop if trade is not updated properly i.e.
@@ -471,13 +473,38 @@ class TakeAllExit(ExitStruct):
                 # if trade is None i.e. ValidationError
                 return open_trades, []
 
-            # Convert StockTrade to dictionary only if all fields are populated
-            # i.e. trade completed.
-            if self._validate_completed_trades(trade):
-                completed_trades.append(trade.model_dump())
+            if initial_exit_lots > 0:
+                # Number of lots to close partial open position
+                lots_to_exit = trade.entry_lots - initial_exit_lots
+
+                # Create completed trades using 'lots_to_exit'
+                completed_trades.append(self._gen_completed_trade(trade, lots_to_exit))
+
+            else:
+                # Generate completed trades for fully open position
+                if self._validate_completed_trades(trade):
+                    completed_trades.append(trade.model_dump())
 
         # Reset open_trades
         if len(completed_trades) == len(open_trades):
             open_trades.clear()
 
         return open_trades, completed_trades
+
+    def _gen_completed_trade(
+        self, trade: StockTrade, lots_to_exit: Decimal
+    ) -> dict[str, Any]:
+        """Generate StockTrade object with completed trade from 'StockTrade'
+        and convert to dictionary."""
+
+        # Create a shallow copy of the updated trade
+        completed_trade = trade.model_copy()
+
+        # Update the 'entry_lots' and 'exit_lots' to be same as 'lots_to_exit'
+        completed_trade.entry_lots = lots_to_exit
+        completed_trade.exit_lots = lots_to_exit
+
+        if not self._validate_completed_trades(completed_trade):
+            raise ValueError("Completed trades not properly closed.")
+
+        return completed_trade.model_dump()

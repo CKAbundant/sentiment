@@ -225,6 +225,10 @@ class EntryStruct(ABC):
                 "'entry_date' field is not sequential i.e. entry_date is lower than the entry_date in the previous item."
             )
 
+        # Validate all exit lots are less than entry lots
+        if any(trade.exit_lots >= trade.entry_lots for trade in open_trades):
+            raise ValueError("Completed trades observed in 'open_trades'.")
+
 
 class MultiEntry(EntryStruct):
     """Allows multiple positions of same ticker i.e. new 'StockTrade' pydantic
