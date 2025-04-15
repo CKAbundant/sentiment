@@ -132,7 +132,6 @@ class GenTrades(ABC):
     def take_profit(
         self,
         dt: datetime,
-        ex_sig: PriceAction,
         exit_price: float,
     ) -> list[dict[str, Any]]:
         """Close existing open positions based on 'self.exit_struct' method.
@@ -140,8 +139,6 @@ class GenTrades(ABC):
         Args:
             dt (datetime):
                 Trade datetime object.
-            ex_sig (PriceAction):
-                Action to close open position either "buy" or "sell".
             exit_price (float):
                 Exit price of stock ticker.
 
@@ -161,7 +158,7 @@ class GenTrades(ABC):
 
         # Update open trades and generate completed trades
         self.open_trades, completed_trades = exit_instance.close_pos(
-            self.open_trades, dt, ex_sig, exit_price
+            self.open_trades, dt, exit_price
         )
 
         return completed_trades

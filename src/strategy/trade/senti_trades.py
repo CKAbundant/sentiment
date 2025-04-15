@@ -131,13 +131,15 @@ class SentiTrades(GenTrades):
             print(f"dt : {dt}")
             print(f"close : {close}")
             print(f"ent_sig : {ent_sig}")
+            print(f"ex_sig : {ex_sig}")
 
             # Get net position
             net_pos = self.get_net_pos()
+            print(f"net_pos : {net_pos}")
 
             # Close off all open positions at end of trading period
             if idx >= len(df) - 1 and net_pos != 0:
-                completed_list.extend(self.exit_all(dt, ex_sig, close))
+                completed_list.extend(self.exit_all(dt, close))
 
                 # Skip creating new open positions after all open positions closed
                 continue
@@ -150,14 +152,14 @@ class SentiTrades(GenTrades):
 
             # Check to take profit
             if (ex_sig == "sell" or ex_sig == "buy") and net_pos != 0:
-                completed_list.extend(self.take_profit(dt, ex_sig, close))
+                completed_list.extend(self.take_profit(dt, close))
 
             # Check to enter new position
             if ent_sig == "buy" or ent_sig == "sell":
                 self.open_pos(coint_corr_ticker, dt, ent_sig, close)
 
+            print(f"net_pos after update : {self.get_net_pos()}")
             print(f"len(self.open_trades) : {len(self.open_trades)}")
-            print(f"net_pos : {net_pos}")
             print(f"self.open_trades : {self.open_trades}\n")
 
         # No completed trades recorded

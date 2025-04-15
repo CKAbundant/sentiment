@@ -286,7 +286,7 @@ class GenPriceAction:
             file_name = f"{ticker}_{coint_corr_ticker}.csv"
             file_path = f"{self.price_action_dir}/{file_name}"
             # utils.save_csv(df_pa, file_path, save_index=True)
-            utils.save_csv(df_coint_corr_ticker, file_path, save_index=True)
+            utils.save_csv(df_coint_corr_ticker, file_path, save_index=False)
 
         # # Combine all trades DataFrame
         # return pd.concat(trades_list, axis=0).reset_index(drop=True)
