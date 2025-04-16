@@ -22,7 +22,6 @@ StopMethod = Literal[
     "percent_loss",
     "latest_loss",
     "nearest_loss",
-    "day_high_low",
 ]
 
 # Mapping

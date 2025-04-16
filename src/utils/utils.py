@@ -378,6 +378,42 @@ def display_divergent_rating(
     )
 
 
+def display_open_trades(open_trades: deque[StockTrade]) -> None:
+    """Omit 'days_held', 'profit_loss', 'percent_ret', 'daily_ret' and 'win' fields in StockTrade."""
+
+    if len(open_trades) == 0:
+        print("open_trades : []\n")
+        return
+
+    msg_list = []
+    for trade in open_trades:
+        exit_date = (
+            f"'{trade.exit_datetime.strftime("%Y-%m-%d")}'"
+            if trade.exit_datetime
+            else "None"
+        )
+        exit_action = f"'{trade.exit_action}'" if trade.exit_action else "None"
+
+        trade_str = (
+            "   {\n"
+            f"      ticker: '{trade.ticker}', "
+            f"ent_dt: '{trade.entry_datetime.strftime("%Y-%m-%d")}', "
+            f"ent_act: '{trade.entry_action}', "
+            f"ent_lots: {trade.entry_lots}, "
+            f"ent_price: {trade.entry_price}, "
+            f"ex_dt: {exit_date}, "
+            f"ex_act: {exit_action}, "
+            f"ex_lots: {trade.exit_lots}, "
+            f"ex_price: {trade.exit_price}"
+            "\n   },"
+        )
+        msg_list.append(trade_str)
+
+    msg = "\n".join(msg_list)
+
+    print(f"open_trades : \n[\n{msg}\n]\n")
+
+
 def validate_literal(var: str, literal: Any, literal_name: str) -> str:
     """Ensure the variable meets the requirement of literal type"""
 
@@ -409,4 +445,4 @@ def get_std_field(open_trades: deque["StockTrade"], std_field: str) -> str:
     if len(counter) > 1:
         raise ValueError(f"'{std_field}' field is not consistent.")
 
-    return list(counter.keys())[0]
+    return "wait" if len(counter) == 0 else list(counter.keys())[0]

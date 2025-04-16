@@ -61,7 +61,7 @@ class PercentLoss(CalExitPrice):
             (Decimal): Exit price for all multiple open positions.
         """
 
-        entry_action = get_std_field(open_trades, entry_action)
+        entry_action = get_std_field(open_trades, "entry_action")
 
         # Current investment = investment value of current open positions
         cur_invest = sum(

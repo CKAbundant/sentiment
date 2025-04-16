@@ -32,6 +32,7 @@ unless specified otherwise.
 from collections import Counter
 from datetime import datetime
 from decimal import Decimal
+from pprint import pformat
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -39,7 +40,7 @@ import pandas as pd
 
 from config.variables import EXIT_PRICE_MAPPING, EntryMethod, ExitMethod, PriceAction
 from src.strategy.base import GenTrades
-from src.utils.utils import get_class_instance, get_std_field
+from src.utils.utils import display_open_trades, get_class_instance, get_std_field
 
 
 class SentiTrades(GenTrades):
@@ -99,7 +100,7 @@ class SentiTrades(GenTrades):
             "entry_signal",
             "exit_signal",
         ],
-        monitor_close: str = "close",
+        monitor_close: bool = True,
         strategy_dir: str = "./src/strategy",
         percent_loss: float | None = None,
         exit_method: ExitMethod | None = None,
@@ -149,13 +150,11 @@ class SentiTrades(GenTrades):
                 # Skip creating new open positions after all open positions closed
                 continue
 
-            # Check to cut loss
+            # Check to cut loss for all open position
             if net_pos != 0 and all(
                 item is not None for item in [self.percent_loss, self.exit_method]
             ):
-                completed_list.extend(
-                    self.stop_loss(dt, ex_sig, high, low, close, is_end)
-                )
+                completed_list.extend(self.stop_loss(dt, high, low, close))
 
             # Check to take profit
             if (ex_sig == "sell" or ex_sig == "buy") and net_pos != 0:
@@ -176,7 +175,7 @@ class SentiTrades(GenTrades):
 
             print(f"net_pos after update : {self.get_net_pos()}")
             print(f"len(self.open_trades) : {len(self.open_trades)}")
-            print(f"self.open_trades : {self.open_trades}\n")
+            display_open_trades(self.open_trades)
 
         # No completed trades recorded
         if not completed_list:
@@ -218,8 +217,23 @@ class SentiTrades(GenTrades):
 
         # Compute stop loss price based on 'self.exit_method'
         stop_price = self.cal_stop_price()
-
         entry_action = get_std_field(self.open_trades, "entry_action")
+
+        if entry_action == "buy":
+            msg = (
+                f"close [current: {close}]"
+                if self.monitor_close
+                else f"low [current: {low}]"
+            )
+            print(f"stop_price [long] : {stop_price} -> monitor {msg}")
+
+        else:
+            msg = (
+                f"close [current: {close}]"
+                if self.monitor_close
+                else f"high [current: {high}]"
+            )
+            print(f"stop_price [short] : {stop_price} -> monitor {msg}")
 
         cond_list = [
             self.monitor_close and entry_action == "buy" and close < stop_price,
@@ -230,7 +244,12 @@ class SentiTrades(GenTrades):
 
         # Exit all open positions if any condition in 'cond_list' is true
         if any(cond_list):
-            completed_trades.extend(self.exit_all(dt, close))
+            exit_action = "sell" if entry_action == "buy" else "buy"
+            print(f"\nStop triggered -> {exit_action} @ stop price {stop_price}\n")
+
+            completed_trades.extend(self.exit_all(dt, stop_price))
+
+        return completed_trades
 
     def cal_stop_price(self) -> Decimal:
         """Compute stop price via concrete implementation of 'CalExitPrice'.
