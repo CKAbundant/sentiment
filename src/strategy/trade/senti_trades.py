@@ -40,7 +40,12 @@ import pandas as pd
 
 from config.variables import EXIT_PRICE_MAPPING, EntryMethod, ExitMethod, PriceAction
 from src.strategy.base import GenTrades
-from src.utils.utils import display_open_trades, get_class_instance, get_std_field
+from src.utils.utils import (
+    display_open_trades,
+    display_stop_price,
+    get_class_instance,
+    get_std_field,
+)
 
 
 class SentiTrades(GenTrades):
@@ -79,12 +84,14 @@ class SentiTrades(GenTrades):
             Exit method to generate stop price.
 
     Attributes:
-        no_trades (list[str]):
-            List containing stock tickers with no completed trades.
         percent_loss (float):
             If provided, percentage loss allowed for investment.
         exit_method (ExitMethod):
             Exit method to generate stop price.
+        no_trades (list[str]):
+            List containing stock tickers with no completed trades.
+        stop_list (list[dict[str, datetime | Decimal]]):
+            List to record datetime, stop price and whether stop price is triggered.
     """
 
     def __init__(
@@ -113,6 +120,7 @@ class SentiTrades(GenTrades):
         self.percent_loss = percent_loss
         self.exit_method = exit_method
         self.no_trades = []
+        self.stop_info_list = []
 
     def gen_trades(self, df_senti: pd.DataFrame) -> pd.DataFrame:
         """Generate DataFrame containing completed trades for trading strategy."""
@@ -120,7 +128,8 @@ class SentiTrades(GenTrades):
         completed_list = []
 
         # Filter out null values for OHLC due to weekends and holiday
-        df = df_senti.loc[:, self.req_cols].copy()
+        df = df_senti.copy()
+        df = df.loc[:, self.req_cols]
 
         # Assume positions are opened or closed at market closing (1600 hrs New York)
         df = self.set_mkt_cls_dt(df)
@@ -181,6 +190,11 @@ class SentiTrades(GenTrades):
         if not completed_list:
             self.no_trades.append(ticker)
 
+        # Convert 'stop_info_list' to DataFrame and append to 'df_senti'
+        # 'self.stop_list and 'self.trigger_list' are not empty
+        if self.stop_info_list:
+            df_senti = self.append_stop_info(df_senti)
+
         # Append 'news_ticker' column to DataFrame generated from completed trades
         df_trades = pd.DataFrame(completed_list)
         df_trades.insert(0, "news_ticker", ticker)
@@ -218,22 +232,9 @@ class SentiTrades(GenTrades):
         # Compute stop loss price based on 'self.exit_method'
         stop_price = self.cal_stop_price()
         entry_action = get_std_field(self.open_trades, "entry_action")
-
-        if entry_action == "buy":
-            msg = (
-                f"close [current: {close}]"
-                if self.monitor_close
-                else f"low [current: {low}]"
-            )
-            print(f"stop_price [long] : {stop_price} -> monitor {msg}")
-
-        else:
-            msg = (
-                f"close [current: {close}]"
-                if self.monitor_close
-                else f"high [current: {high}]"
-            )
-            print(f"stop_price [short] : {stop_price} -> monitor {msg}")
+        display_stop_price(
+            self.monitor_close, stop_price, entry_action, high, low, close
+        )
 
         cond_list = [
             self.monitor_close and entry_action == "buy" and close < stop_price,
@@ -248,6 +249,14 @@ class SentiTrades(GenTrades):
             print(f"\nStop triggered -> {exit_action} @ stop price {stop_price}\n")
 
             completed_trades.extend(self.exit_all(dt, stop_price))
+            self.stop_info_list.append(
+                {"date": dt, "stop_price": stop_price, "triggered": Decimal("1")}
+            )
+
+        else:
+            self.stop_info_list.append(
+                {"date": dt, "stop_price": stop_price, "triggered": Decimal("0")}
+            )
 
         return completed_trades
 
@@ -309,5 +318,32 @@ class SentiTrades(GenTrades):
                 hour=16, minute=0, tzinfo=ZoneInfo("America/New_York")
             )
         )
+
+        return df
+
+    def append_stop_info(self, df_senti: pd.DataFrame) -> pd.DataFrame:
+        """Append stop info (i.e. stop price and whether triggered) to
+        'df_senti' DataFrame."""
+
+        df = df_senti.copy()
+
+        # Convert 'self.stop_info_list' to DataFrame
+        df_stop = pd.DataFrame(self.stop_info_list)
+
+        # Set time to 0000 hrs for 'dt' column in order to perform join
+        df_stop["date"] = df_stop["date"].map(
+            lambda dt: dt.replace(hour=0, minute=0, tzinfo=None)
+        )
+        df_stop = df_stop.set_index("date")
+
+        # Set 'date' column as index
+        if "date" not in df.columns:
+            raise ValueError("'date' column is not found.")
+
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.set_index("date")
+
+        # Perform join via index
+        df = df.join(df_stop)
 
         return df

@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any, Literal, Type, TypeVar, get_args, get_ori
 import numpy as np
 import pandas as pd
 
+from config.variables import PriceAction
+
 if TYPE_CHECKING:
     from src.strategy.base.stock_trade import StockTrade
 
@@ -412,6 +414,28 @@ def display_open_trades(open_trades: deque[StockTrade]) -> None:
     msg = "\n".join(msg_list)
 
     print(f"open_trades : \n[\n{msg}\n]\n")
+
+
+def display_stop_price(
+    monitor_close: bool,
+    stop_price: float,
+    entry_action: PriceAction,
+    high: float,
+    low: float,
+    close: float,
+) -> None:
+    """Display stop price as well as the price to monitor i.e. either 'high',
+    'low' or 'close'"""
+
+    if entry_action == "buy":
+        msg = f"close [current: {close}]" if monitor_close else f"low [current: {low}]"
+        print(f"stop_price [long] : {stop_price} -> monitor {msg}")
+
+    else:
+        msg = (
+            f"close [current: {close}]" if monitor_close else f"high [current: {high}]"
+        )
+        print(f"stop_price [short] : {stop_price} -> monitor {msg}")
 
 
 def validate_literal(var: str, literal: Any, literal_name: str) -> str:
