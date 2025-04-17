@@ -18,13 +18,13 @@ class TradeSignal(ABC):
 
     Args:
         entry_type (EntryType):
-            Whether to allow long ("long_only"), short ("short_only") or
-            both long and short position ("long_or_short").
+            Whether to allow long ("long"), short ("short") or
+            both long and short position ("longshort").
 
     Attributes:
         entry_type (EntryType):
-            Whether to allow long ("long_only"), short ("short_only") or
-            both long and short position ("long_or_short").
+            Whether to allow long ("long"), short ("short") or
+            both long and short position ("longshort").
     """
 
     def __init__(self, entry_type: EntryType) -> None:
@@ -47,9 +47,9 @@ class EntrySignal(TradeSignal, ABC):
         column to DataFrame containing prices and any info required to generate
         entry signal.
 
-        - 'long_only' -> only 'buy' or 'wait' signal allowed.
-        - 'short_only' -> only 'sell' or 'wait' signal allowed.
-        - 'long_or_short' -> 'buy', 'sell', or 'wait' signal allowed.
+        - 'long' -> only 'buy' or 'wait' signal allowed.
+        - 'short' -> only 'sell' or 'wait' signal allowed.
+        - 'longshort' -> 'buy', 'sell', or 'wait' signal allowed.
         """
 
         pass
@@ -59,10 +59,10 @@ class EntrySignal(TradeSignal, ABC):
         if "entry_signal" not in df.columns:
             raise ValueError(f"'entry_signal' column not found!")
 
-        if self.entry_type == "long_only" and (df["entry_signal"] == "sell").any():
+        if self.entry_type == "long" and (df["entry_signal"] == "sell").any():
             raise ValueError("Long only strategy cannot generate sell entry signals")
 
-        if self.entry_type == "short_only" and (df["entry_signal"] == "buy").any():
+        if self.entry_type == "short" and (df["entry_signal"] == "buy").any():
             raise ValueError("Short only strategy cannot generate buy entry signals")
 
 
@@ -76,9 +76,9 @@ class ExitSignal(TradeSignal, ABC):
         column to DataFrame containing prices and any info required to generate
         entry signal.
 
-        - 'long_only' -> only 'sell' or 'wait' exit signal allowed.
-        - 'short_only' -> only 'buy' or 'wait' exit signal allowed.
-        - 'long_or_short' -> 'buy', 'sell', or 'wait' exit signal allowed.
+        - 'long' -> only 'sell' or 'wait' exit signal allowed.
+        - 'short' -> only 'buy' or 'wait' exit signal allowed.
+        - 'longshort' -> 'buy', 'sell', or 'wait' exit signal allowed.
         """
 
         pass
@@ -88,8 +88,8 @@ class ExitSignal(TradeSignal, ABC):
         if "exit_signal" not in df.columns:
             raise ValueError(f"'exit_signal' column not found!")
 
-        if self.entry_type == "long_only" and (df["exit_signal"] == "buy").any():
+        if self.entry_type == "long" and (df["exit_signal"] == "buy").any():
             raise ValueError("Long only strategy cannot generate buy exit signals.")
 
-        if self.entry_type == "short_only" and (df["exit_signal"] == "sell").any():
+        if self.entry_type == "short" and (df["exit_signal"] == "sell").any():
             raise ValueError("Short only strategy cannot generate sell exit signals.")

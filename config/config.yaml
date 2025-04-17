@@ -1,0 +1,82 @@
+date: null
+download_ohlcv: true
+cal_coint_corr: true
+sentiment: true
+test_all: true
+plot_graph: true
+percent_loss: 0.01
+top_n_tickers: 10
+
+# Path
+data_dir: "./data"
+stock_dir: "${data_dir}/stock"
+coint_corr_dir: "${data_dir}/coint_corr_dir"
+
+# Run single test
+single:
+  entry_type: "long" # long, short, longshort
+  entry_struct: "multiple" # multiple, multiple_half, single
+  exit_struct: "take_all" # fifo, lifo, half_fifo, half_lifo, take_all
+  exit_method: "no_stop" # percent_loss, nearest_loss, latest_loss
+  hf_model: "ziweichen" # prosusai, ziweichen, yiyanghkust, aventiq_ai
+  coint_corr_fn: "coint" # pearsonr, spearmanr, kendalltau, conint
+  period: 5
+
+# Run full test
+stop:
+  - "no_stop"
+  - "percent_loss"
+  - "nearest_loss"
+  - "latest_loss"
+hf_model:
+  - "prosusai"
+  - "yiyanghkust"
+  - "ziweichen"
+  - "aventiq_ai"
+coint_corr_fn:
+  - "coint"
+  - "pearsonr"
+  - "spearmanr"
+  - "kendalltau"
+period:
+  - 1
+  - 3
+  - 5
+
+full:
+  # long and short strategy (excluding single entry)
+  - - - "long"
+      - "short"
+    - - "multiple"
+      - "multiple_half"
+    - - "fifo"
+      - "lifo"
+      - "half_fifo"
+      - "half_lifo"
+      - "take_all"
+    - "${stop}"
+    - "${hf_model}"
+    - "${coint_corr_fn}"
+    - "${period}"
+
+  # single entry for long and short strategy
+  - - - "long"
+      - "short"
+    - - "single"
+    - - "fifo"
+      - "half_fifo"
+    - "${stop}"
+    - "${hf_model}"
+    - "${coint_corr_fn}"
+    - "${period}"
+    
+  # long-short strategy
+  - - - "longshort"
+    - - "multiple"
+      - "multiple_half"
+      - "single"
+    - - "take_all"
+    - "${stop}"
+    - "${hf_model}"
+    - "${coint_corr_fn}"
+    - "${period}"

@@ -12,7 +12,7 @@ class SentiEntry(base.EntrySignal):
 
     Args:
         entry_type (EntryType):
-            Either "long_only", "short_only", "long_or_short".
+            Either "long", "short", "longshort".
         rating_col (str):
             Name of column containing sentiment rating to generate price action.
 
@@ -51,10 +51,10 @@ class SentiEntry(base.EntrySignal):
         # Ensure 'median_rating_excl' is integer type
         df[self.rating_col] = df[self.rating_col].astype(int)
 
-        if self.entry_type == "long_only":
+        if self.entry_type == "long":
             df["entry_signal"] = df[self.rating_col].map(self._gen_long_signal)
 
-        elif self.entry_type == "short_only":
+        elif self.entry_type == "short":
             df["entry_signal"] = df[self.rating_col].map(self._gen_short_signal)
 
         else:

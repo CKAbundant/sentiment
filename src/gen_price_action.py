@@ -95,8 +95,8 @@ class GenPriceAction:
         coint_corr_fn: COINT_CORR_FN = "coint",
         period: int = 5,
         top_n: int = 10,
+        data_dir: str = "./data",
         stock_dir: str = "./data/stock",
-        results_dir: str = "./data/results",
         coint_corr_dir: str = "./data/coint_corr",
     ) -> None:
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
@@ -106,7 +106,7 @@ class GenPriceAction:
         self.stock_dir = stock_dir
 
         coint_corr_date_dir = f"{coint_corr_dir}/{self.date}"
-        results_date_dir = f"{results_dir}/{self.date}"
+        results_date_dir = f"{data_dir}/{self.date}"
 
         self.coint_corr_path = f"{coint_corr_date_dir}/coint_corr_{period}y.csv"
         self.senti_path = f"{results_date_dir}/sentiment.csv"
@@ -271,7 +271,7 @@ class GenPriceAction:
 
             # # Load Sentiment Strategy (multiple + take_all)
             # senti_long_multi_all = TradingStrategy(
-            #     "long_only",
+            #     "long",
             #     SentiEntry,
             #     SentiExit,
             #     GetTrades(),

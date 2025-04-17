@@ -15,10 +15,11 @@ Component = Literal["word", "punct", "special"]
 
 # Trades
 PriceAction = Literal["buy", "sell", "wait"]
-EntryType = Literal["long_only", "short_only", "long_or_short"]
+EntryType = Literal["long", "short", "longshort"]
 EntryMethod = Literal["multiple", "multiple_half", "single"]
 ExitMethod = Literal["fifo", "lifo", "half_fifo", "half_lifo", "take_all"]
 StopMethod = Literal[
+    "no_stop",
     "percent_loss",
     "latest_loss",
     "nearest_loss",

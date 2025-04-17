@@ -1,12 +1,12 @@
 """Helper functions used in 'main.py'"""
 
-from argparse import ArgumentParser, Namespace
 from decimal import Decimal
 from itertools import product
-from typing import get_args
+from typing import Any
 
 import numpy as np
 import pandas as pd
+from omegaconf import DictConfig
 
 from config.variables import COINT_CORR_FN, HF_MODEL
 from src.cal_profit_loss import CalProfitLoss
@@ -14,79 +14,86 @@ from src.gen_price_action import GenPriceAction
 from src.utils import utils
 
 
-def parse_arguments() -> Namespace:
-    """Parse optional 'date' and 'no-sentiment' flags from command line."""
+def gen_signals(date: str, cfg: DictConfig) -> None:
+    """Generate price signals for single strategy or all strategies combinations."""
 
-    parser = ArgumentParser(description="Parse optional date")
+    params = {
+        "date": date,
+        "top_n": cfg.top_n_tickers,
+        "data_dir": cfg.data_dir,
+        "stock_dir": cfg.stock_dir,
+        "coint_corr_dir": cfg.coint_corr_dir,
+    }
 
-    # Add optional date' argument (default to today's date)
-    parser.add_argument(
-        "--date",
-        type=str,
-        default=utils.get_current_dt(fmt="%Y-%m-%d"),  # Default to today's date
-        help="Date in 'YYYY-MM-DD' format (default: today's date).",
-    )
+    if cfg.test_all:
+        # Test out different strategies
+        run_strategies(params, cfg.full)
 
-    # Add '--no-sentiment' flag
-    parser.add_argument(
-        "--no-sentiment",
-        action="store_true",  # Set to True if flag is present
-        help="Skip web scraping and sentiment analysis.",
-    )
-
-    # Add '--strategy' flag
-    parser.add_argument(
-        "--strategy",
-        type=str,
-        default="Senti",
-        help="Name of entry signal strategy (Default: 'Senti')",
-    )
-
-    # Add '--entry-struct' flag
-    parser.add_argument(
-        "--entry-struct",
-        type=str,
-        default="multiple",
-        help="Name of entry structure (Default: 'multiple')",
-    )
-
-    # Add '--exit-struct' flag
-    parser.add_argument(
-        "--exit-struct",
-        type=str,
-        default="take_all",
-        help=("Name of exit structure (Default: 'take_all')"),
-    )
-
-    # Add '--num-lots' flag
-    parser.add_argument(
-        "--num-lots",
-        type=int,
-        default=1,
-        help=("Number of lots to open new position (Default: 1)"),
-    )
-
-    return parser.parse_args()
-
-
-def run_strategies(date: str) -> None:
-    """Run different combinations of HuggingFace FinBERT sentiment rater,
-    cointegration/correlation analysis and time periods for selected 'date'.
-    """
-
-    # Get FinBERT models, cointegration/correlation functions and time periods
-    hf_models = get_args(HF_MODEL)
-    coint_corr_fns = get_args(COINT_CORR_FN)
-    periods = (1, 3, 5)
-
-    for hf_model, coint_corr_fn, period in product(hf_models, coint_corr_fns, periods):
-        # Generate price action of top 10 cointegrated/correlated stocks
-        gen_pa = GenPriceAction(date, hf_model, coint_corr_fn, period)
+    else:
+        # Test specific strategy
+        gen_pa = GenPriceAction(params, cfg.single)
         gen_pa.run()
 
-        # Compile profit and loss; and generate reports
-        cal_pl = CalProfitLoss(date, hf_model, coint_corr_fn, period)
-        _, _, _, _ = cal_pl.run()
+
+def run_strategies(params: dict[str, Any], full: DictConfig) -> None:
+    """Run different combinations of HuggingFace FinBERT sentiment rater,
+    cointegration/correlation analysis and time periods for selected 'date'.
+
+    Args:
+        params (dict[str, Any]):
+            Dictionary containing additional parameters i.e. 'date', 'top_n',
+            and file paths required to initialze 'GenPriceAction' class.
+        full (DictConfig):
+            OmegaConf DictConfig object containing parameters for running all
+            strategies.
+
+    Returns:
+        None.
+    """
+
+    # # Get FinBERT models, cointegration/correlation functions and time periods
+    # hf_models = get_args(HF_MODEL)
+    # coint_corr_fns = get_args(COINT_CORR_FN)
+    # periods = (1, 3, 5)
+
+    # for hf_model, coint_corr_fn, period in product(hf_models, coint_corr_fns, periods):
+    #     # Generate price action of top 10 cointegrated/correlated stocks
+    #     gen_pa = GenPriceAction(date, hf_model, coint_corr_fn, period)
+    #     gen_pa.run()
+
+    #     # Compile profit and loss; and generate reports
+    #     cal_pl = CalProfitLoss(date, hf_model, coint_corr_fn, period)
+    #     _, _, _, _ = cal_pl.run()
+
+    # Get list of combinations for long, short and long-short strategies
+    combi_list = [list(product(*strat)) for strat in full]
+    combi_list = [combi for sub_list in combi_list for combi in sub_list]
+
+    for (
+        ent_type,
+        ent_struct,
+        ex_struct,
+        stop_method,
+        hf_model,
+        coint_corr_fn,
+        period,
+    ) in combi_list:
+        # Generate price actions of top 10 cointegrated/correlated stocks
+        gen_pa = GenPriceAction(
+            date=params["date"],
+            entry_type=ent_type,
+            entry_struct=ent_struct,
+            exit_struct=ex_struct,
+            stop_method=stop_method,
+            hf_model=hf_model,
+            coint_corr_fn=coint_corr_fn,
+            period=period,
+            top_n=params["top_n"],
+            data_dir=params["data_dir"],
+            stock_dir=params["stock_dir"],
+            coint_corr_dir=params["coint_corr_dir"],
+        )
+        gen_pa.run()
 
 
 def convert_to_decimal(val: np.number) -> Decimal:

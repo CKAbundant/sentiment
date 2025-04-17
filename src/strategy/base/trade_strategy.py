@@ -15,7 +15,7 @@ class TradingStrategy:
 
     Usage:
         >>> strategy = TradingStrategy(
-                entry_type="long_only",
+                entry_type="long",
                 entry=SentiEntry,
                 exit=SentiExit,
                 trades=SentiTrades,
@@ -24,8 +24,8 @@ class TradingStrategy:
 
     Args:
         entry_type (EntryType):
-            Types of open positions allowed either 'long_only', 'short_only' or
-            'long_or_short'.
+            Types of open positions allowed either 'long', 'short' or
+            'longshort'.
         entry (EntrySignal):
             Class instance of concrete implementation of 'EntrySignal' abstract class.
         exit (ExitSignal):
@@ -37,8 +37,8 @@ class TradingStrategy:
 
     Attributes:
         entry_type (EntryType):
-            Types of open positions allowed either 'long_only', 'short_only' or
-            'long_or_short'.
+            Types of open positions allowed either 'long', 'short' or
+            'longshort'.
         entry (EntrySignal):
             Class instance of concrete implementation of 'EntrySignal' abstract class.
         exit (ExitSignal):

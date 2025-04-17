@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Literal, Type, TypeVar, get_args, get_ori
 
 import numpy as np
 import pandas as pd
+from omegaconf import DictConfig, OmegaConf
 
 from config.variables import PriceAction
 
@@ -20,6 +21,20 @@ if TYPE_CHECKING:
 
 # Create generic type variable 'T'
 T = TypeVar("T")
+
+
+def load_config(cfg_path: str = "./config/config.yaml") -> DictConfig | None:
+    """Load configuration in 'config.yaml'."""
+
+    if not Path(cfg_path):
+        return FileNotFoundError(f"'config.yaml' is not available at '{cfg_path}'.")
+
+    try:
+        # load YAML configuration path
+        return OmegaConf.load(cfg_path)
+
+    except ValueError as e:
+        print(f"Unable to load 'config.yaml' : {e}")
 
 
 def get_class_instance(
@@ -380,7 +395,7 @@ def display_divergent_rating(
     )
 
 
-def display_open_trades(open_trades: deque[StockTrade]) -> None:
+def display_open_trades(open_trades: deque["StockTrade"]) -> None:
     """Omit 'days_held', 'profit_loss', 'percent_ret', 'daily_ret' and 'win' fields in StockTrade."""
 
     if len(open_trades) == 0:
