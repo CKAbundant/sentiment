@@ -23,18 +23,26 @@ only the closing price of co-integrated stock.
 """
 
 from pathlib import Path
-from typing import Literal
 
 import numpy as np
 import pandas as pd
-import pandas_market_calendars as mcal
+from omegaconf import DictConfig
 from tqdm import tqdm
 
-from config.variables import COINT_CORR_FN, HF_MODEL
+from config.variables import (
+    EXIT_PRICE_MAPPING,
+    SIGNAL_MAPPING,
+    STRUCT_MAPPING,
+    TRADES_MAPPING,
+    CointCorrFn,
+    EntryMethod,
+    EntryType,
+    ExitMethod,
+    HfModel,
+    StopMethod,
+)
 from src.cal_coint_corr import CalCointCorr
 from src.strategy.base import GenTrades, TradingStrategy
-from src.strategy.entry.senti_entry import SentiEntry
-from src.strategy.exit.senti_exit import SentiExit
 from src.utils import utils
 
 
@@ -47,34 +55,89 @@ class GenPriceAction:
         >>> df = gen_pa.run()
 
     Args:
+        path (DictConfig):
+            OmegaConf DictConfig containing required folder and file paths.
         date (str):
             If provided, date when news are scraped.
-        hf_model (HF_MODEL):
+        entry_type (EntryType):
+            Whether to allow long ("long"), short ("short") or
+            both long and short position ("longshort").
+        entry_signal (str):
+            Name of python script containing concrete implemenation of 'EntrySignal'.
+        exit_signal (str):
+            Name of python script containing concrete implementation of 'ExitSignal'.
+        trades_method (str):
+            Name of python script containing concrete implementation of 'GenTrades'.
+        entry_struct (EntryMethod):
+            Whether to allow multiple open position ("mulitple") or single
+            open position at a time ("single") (Default: "multiple").
+        exit_struct (ExitMethod):
+            Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
+            take profit for half open positions repeatedly ("half_life") or
+            take profit for all open positions ("take_all") (Default: "take_all").
+        stop_method (ExitMethod):
+            Exit method to generate stop price.
+        hf_model (HfModel):
             Name of FinBERT model in Huggi[ngFace (Default: "ziweichen").
-        coint_corr_fn (COINT_CORR_FN):
+        coint_corr_fn (CointCorrFn):
             Name of function to perform either cointegration or correlation.
         period (int):
             Time period used to compute cointegration (Default: 5).
+        num_lots (int):
+            Number of lots to intitate new open positions (Default: 1).
+        req_cols (list[str]):
+            List of required columns to generate trades
+            (Default: ["date", "high", "low", "close", "entry_signal", "exit_signal"]).
+        monitor_close (bool):
+            Whether to monitor close price ("close") or both high and low price
+            (Default: True).
+        percent_loss (float):
+            Percentage loss allowed for investment (Default: 0.05).
         top_n (int):
             Top N number of stocks with lowest pvalue.
-        stock_dir (str):
-            Relative path to 'stock' folder (Default: "./data/stock").
-        results_dir (str):
-            Relative path of folder containing price action for ticker pairs (i.e.
-            stock ticker and its cointegrated ticker) (Default: "./data/results").
 
     Attributes:
+        path (DictConfig):
+            OmegaConf DictConfig containing required folder and file paths.
         date (str):
             If provided, date when news are scraped.
+        entry_type (EntryType):
+            Whether to allow long ("long"), short ("short") or
+            both long and short position ("longshort").
+        entry_signal (str):
+            Name of concrete implementation of 'EntrySignal' abstract class.
+        exit_signal (str):
+            Name of concrete implementation of 'ExitSignal' abstract class.
+        trades_method (str):
+            Name of python script containing concrete implementation of 'GenTrades'.
+        entry_struct (EntryMethod):
+            Whether to allow multiple open position ("mulitple") or single
+            open position at a time ("single") (Default: "multiple").
+        exit_struct (ExitMethod):
+            Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
+            take profit for half open positions repeatedly ("half_life") or
+            take profit for all open positions ("take_all") (Default: "take_all").
+        stop_method (ExitMethod):
+            Exit method to generate stop price.
         hf_model (str):
             Name of FinBERT model in HuggingFace (Default: "ziweichen").
-        coint_corr_fn (COINT_CORR_FN):
+        coint_corr_fn (CointCorrFn):
             Name of function to perform either cointegration or correlation
             (Default: "coint").
+        period (int):
+            Time period used to compute cointegration (Default: 5).
+        num_lots (int):
+            Number of lots to intitate new open positions (Default: 1).
+        req_cols (list[str]):
+            List of required columns to generate trades
+            (Default: ["date", "high", "low", "close", "entry_signal", "exit_signal"]).
+        monitor_close (bool):
+            Whether to monitor close price ("close") or both high and low price
+            (Default: True).
+        percent_loss (float):
+            Percentage loss allowed for investment (Default: 0.05).
         top_n (int):
             Top N number of stocks with lowest pvalue.
-        stock_dir (str):
-            Relative path to stock folder (Default: "./data/stock").
         coint_corr_path (str):
             If provided, relative path to CSV cointegration information (Default: None).
         senti_path (str):
@@ -90,27 +153,67 @@ class GenPriceAction:
 
     def __init__(
         self,
+        path: DictConfig,
         date: str | None = None,
-        hf_model: HF_MODEL = "ziweichen",
-        coint_corr_fn: COINT_CORR_FN = "coint",
+        entry_type: EntryType = "long",
+        entry_signal: str = "SentiEntry",
+        exit_signal: str = "SentiExit",
+        trades_method: str = "SentiTrades",
+        entry_struct: EntryMethod = "multiple",
+        exit_struct: ExitMethod = "take_all",
+        stop_method: StopMethod = "no_stop",
+        hf_model: HfModel = "ziweichen",
+        coint_corr_fn: CointCorrFn = "coint",
         period: int = 5,
+        num_lots: int = 1,
+        req_cols: list[str] = [
+            "date",
+            "high",
+            "low",
+            "close",
+            "entry_signal",
+            "exit_signal",
+        ],
+        monitor_close: bool = True,
+        percent_loss: float = 0.05,
         top_n: int = 10,
-        data_dir: str = "./data",
-        stock_dir: str = "./data/stock",
-        coint_corr_dir: str = "./data/coint_corr",
     ) -> None:
+        self.path = path
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
+        self.entry_type = entry_type
+        self.entry_signal = entry_signal
+        self.exit_signal = exit_signal
+        self.trades_method = trades_method
+        self.entry_struct = entry_struct
+        self.exit_struct = exit_struct
+        self.stop_method = stop_method
         self.hf_model = hf_model
         self.coint_corr_fn = coint_corr_fn
+        self.period = period
+        self.num_lots = num_lots
+        self.req_cols = req_cols
+        self.monitor_close = monitor_close
+        self.percent_loss = percent_loss
         self.top_n = top_n
-        self.stock_dir = stock_dir
 
-        coint_corr_date_dir = f"{coint_corr_dir}/{self.date}"
-        results_date_dir = f"{data_dir}/{self.date}"
+        # Generate required file paths
+        self.gen_paths()
 
-        self.coint_corr_path = f"{coint_corr_date_dir}/coint_corr_{period}y.csv"
-        self.senti_path = f"{results_date_dir}/sentiment.csv"
-        self.model_dir = f"{results_date_dir}/{hf_model}_{coint_corr_fn}_{period}"
+    def gen_paths(self) -> None:
+        """Generate required file paths i.e. 'coint_corr_path', 'senti_path',
+        'model_dir' and 'price_action_dir'."""
+
+        # Generate required folder and file paths
+        coint_corr_date_dir = f"{self.path.coint_corr_dir}/{self.date}"
+        date_dir = f"{self.path.data_dir}/{self.date}"
+
+        self.coint_corr_path = f"{coint_corr_date_dir}/coint_corr_{self.period}y.csv"
+        self.senti_path = f"{date_dir}/sentiment.csv"
+        self.model_dir = (
+            f"{date_dir}/"
+            f"{self.entry_type}_{self.entry_struct}_{self.exit_struct}_{self.stop_method}/"
+            f"{self.hf_model}_{self.coint_corr_fn}_{self.period}"
+        )
         self.price_action_dir = f"{self.model_dir}/price_actions"
 
     def run(self) -> None:
@@ -138,16 +241,16 @@ class GenPriceAction:
             # Append closing price of top N co-integrated stocks with lowest pvalue
             results_list.append(self.gen_topn_close(df_av, df_coint_corr, ticker))
 
-        # # Combine list of DataFrame to a single DataFrame
-        # df_results = pd.concat(results_list, axis=0).reset_index(drop=True)
+        # Combine list of DataFrame to a single DataFrame
+        df_results = pd.concat(results_list, axis=0).reset_index(drop=True)
 
-        # # Create folder if not exist
-        # utils.create_folder(self.model_dir)
+        # Create folder if not exist
+        utils.create_folder(self.model_dir)
 
-        # # Save combined DataFrame
-        # utils.save_csv(
-        #     df_results, f"{self.model_dir}/trade_results.csv", save_index=False
-        # )
+        # Save combined DataFrame
+        utils.save_csv(
+            df_results, f"{self.model_dir}/trade_results.csv", save_index=False
+        )
 
     def load_coint_corr(self) -> pd.DataFrame:
         """Load csv file containing cointegration and correlation info."""
@@ -211,27 +314,6 @@ class GenPriceAction:
 
         return df
 
-    def append_is_holiday(self, data: pd.DataFrame) -> pd.DataFrame:
-        """Append 'is_holiday' column i.e. from 'Monday' to 'Sunday' based on
-        'date' index."""
-
-        df = data.copy()
-
-        # Get holidays for NYSE since 2020
-        nyse = mcal.get_calendar("NYSE")
-        holidays = nyse.holidays().holidays
-        holidays_since_2024 = [
-            holiday for holiday in holidays if holiday >= np.datetime64("2024-01-01")
-        ]
-
-        # Extract date index as list of np.datetime64 objects
-        date_list = [np.datetime64(dt) for dt in df.index.to_list()]
-
-        # Append whether date is holiday
-        df.insert(0, "is_holiday", [dt in holidays_since_2024 for dt in date_list])
-
-        return df
-
     def gen_topn_close(
         self,
         df_av: pd.DataFrame,
@@ -269,27 +351,57 @@ class GenPriceAction:
             # Generate and save DataFrame for each cointegrated stock
             df_coint_corr_ticker = self.append_coint_corr_ohlc(df, coint_corr_ticker)
 
-            # # Load Sentiment Strategy (multiple + take_all)
-            # senti_long_multi_all = TradingStrategy(
-            #     "long",
-            #     SentiEntry,
-            #     SentiExit,
-            #     GetTrades(),
-            # )
-            # df_trades, df_pa = senti_long_multi_all(df_coint_corr_ticker)
-            # trades_list.append(df_trades)
+            # Load Sentiment Strategy
+            trading_strategy = self.gen_strategy()
+            df_trades, df_signals = trading_strategy(df_coint_corr_ticker)
+            trades_list.append(df_trades)
 
             # Create folder if not exist
             utils.create_folder(self.price_action_dir)
 
-            # Save price action DataFrame as csv file
+            # Save signals DataFrame as csv file
             file_name = f"{ticker}_{coint_corr_ticker}.csv"
             file_path = f"{self.price_action_dir}/{file_name}"
-            # utils.save_csv(df_pa, file_path, save_index=True)
-            utils.save_csv(df_coint_corr_ticker, file_path, save_index=False)
+            utils.save_csv(df_signals, file_path, save_index=False)
 
-        # # Combine all trades DataFrame
-        # return pd.concat(trades_list, axis=0).reset_index(drop=True)
+        # Combine all trades DataFrame
+        return pd.concat(trades_list, axis=0).reset_index(drop=True)
+
+    def gen_strategy(self) -> TradingStrategy:
+        """Generate strategy based on 'entry_type', 'entry_struct', 'exit_struct',
+        'stop_method', 'hf_model', 'coint_corr_fn' and 'period'."""
+
+        # Get instance of concrete implementation of 'EntrySignal' abstract class
+        class_name = SIGNAL_MAPPING.get(self.entry_signal)
+        entry_inst = utils.get_class_instance(
+            class_name, self.path.entry_signal_path, entry_type=self.entry_type
+        )
+
+        # Get instance of concrete implementation of 'ExitSignal' abstract class
+        class_name = SIGNAL_MAPPING.get(self.exit_signal)
+        exit_inst = utils.get_class_instance(
+            class_name, self.path.exit_signal_path, entry_type=self.entry_type
+        )
+
+        # Get instance of concrete implementation of 'GenTrades' abstract class
+        class_name = TRADES_MAPPING.get(self.trades_method)
+        trades_inst = utils.get_class_instance(
+            class_name,
+            self.path.trades_path,
+            entry_struct=self.entry_struct,
+            exit_struct=self.exit_struct,
+            num_lots=self.num_lots,
+            req_cols=self.req_cols,
+            monitor_close=self.monitor_close,
+            percent_loss=self.percent_loss,
+            stop_method=self.stop_method,
+            entry_struct_path=self.path.entry_struct_path,
+            exit_struct_path=self.path.exit_struct_path,
+            stop_method_path=self.path.stop_method_path,
+        )
+
+        # Create trading strategy from 'EntrySignal', 'ExitSignal' and 'GenTrades'
+        return TradingStrategy(entry_inst, exit_inst, trades_inst)
 
     def get_topn_tickers(
         self, ticker: str, df_coint_corr: pd.DataFrame

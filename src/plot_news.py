@@ -71,14 +71,14 @@ class PlotNews:
         # Load 'news.csv' as DataFrame
         df_news = pd.read_csv(self.news_path)
 
-        # self.plot_date(df_news, value_name="date")
-        # self.plot_time(
-        #     df_news,
-        #     value_name="time",
-        #     value_vars=["min_minutes", "max_minutes"],
-        # )
-        # self.plot_publisher(df_news)
-        # self.plot_word_count(df_news)
+        self.plot_date(df_news, value_name="date")
+        self.plot_time(
+            df_news,
+            value_name="time",
+            value_vars=["min_minutes", "max_minutes"],
+        )
+        self.plot_publisher(df_news)
+        self.plot_word_count(df_news)
         self.plot_top_n(df_news, top_n=30)
 
     def plot_date(

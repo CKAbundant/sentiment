@@ -1,23 +1,57 @@
-date: null
+date: "2025-04-01"
 download_ohlcv: true
 cal_coint_corr: true
 sentiment: true
 test_all: true
 plot_graph: true
-percent_loss: 0.01
-top_n_tickers: 10
+
+# Entry, exit and trades generation
+entry_signal: "senti_entry"
+exit_signal: "senti_exit"
+trades_method: "senti_trades"
+
 
 # Path
-data_dir: "./data"
-stock_dir: "${data_dir}/stock"
-coint_corr_dir: "${data_dir}/coint_corr_dir"
+path:
+  # directory path
+  data_dir: "./data"
+  stock_dir: "${data_dir}/stock"
+  coint_corr_dir: "${data_dir}/coint_corr_dir"
+  strategy_dir: "src/strategy"
+
+  # file path
+  entry_signal_path: "${strategy_dir}/entry/${entry_signal}.py"
+  exit_signal_path: "${strategy_dir}/exit/${exit_signal}.py"
+  trades_path: "${strategy_dir}/trade/${trades_method}.py"
+  entry_struct_path: "${strategy_dir}/base/entry_struct.py"
+  exit_struct_path: "${strategy_dir}/base/exit_struct.py"
+  stop_method_path: "${strategy_dir}/base/cal_exit_price.py"
+
+# Standard parameters to initialize 'GenPriceAction'
+std:
+  path: "${path}"
+  date: "${date}"
+  entry_signal: "${entry_signal}"
+  exit_signal: "${exit_signal}"
+  trades_method: "${trades_method}"
+  num_lots: 10
+  req_cols:
+    - "date"
+    - "high"
+    - "low"
+    - "close"
+    - "entry_signal"
+    - "exit_signal"
+  monitor_close: true
+  percent_loss: 0.05
+  top_n_tickers: 10
 
 # Run single test
 single:
   entry_type: "long" # long, short, longshort
   entry_struct: "multiple" # multiple, multiple_half, single
   exit_struct: "take_all" # fifo, lifo, half_fifo, half_lifo, take_all
-  exit_method: "no_stop" # percent_loss, nearest_loss, latest_loss
+  stop_method: "no_stop" # percent_loss, nearest_loss, latest_loss
   hf_model: "ziweichen" # prosusai, ziweichen, yiyanghkust, aventiq_ai
   coint_corr_fn: "coint" # pearsonr, spearmanr, kendalltau, conint
   period: 5

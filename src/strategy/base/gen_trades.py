@@ -31,9 +31,12 @@ class GenTrades(ABC):
         monitor_close (bool):
             Whether to monitor close price ("close") or both high and low price
             (Default: True).
-        strategy_dir (str):
-            Relative path to strategy folder containing subfolders for implementing
-            trading strategy (Default: "./src/strategy").
+        entry_struct_path (str):
+            Relative path to 'entry_struct.py'
+            (Default: "./src/strategy/base/entry_struct.py").
+        exit_struct_path (str):
+            Relative path to 'exit_struct.py'
+            (Default: "./src/strategy/base/exit_struct.py").
 
     Attributes:
         entry_struct (EntryMethod):
@@ -50,8 +53,12 @@ class GenTrades(ABC):
         monitor_close (bool):
             Whether to monitor close price ("close") or both high and low price
             (Default: True).
-        open_trades (deque[StockTrade]):
-                Deque list of StockTrade pydantic object to record open trades.
+        entry_struct_path (str):
+            Relative path to 'entry_struct.py'
+            (Default: "./src/strategy/base/entry_struct.py").
+        exit_struct_path (str):
+            Relative path to 'exit_struct.py'
+            (Default: "./src/strategy/base/exit_struct.py").
     """
 
     def __init__(
@@ -61,20 +68,20 @@ class GenTrades(ABC):
         num_lots: int,
         req_cols: list[str],
         monitor_close: bool = True,
-        strategy_dir: str = "./src/strategy",
+        entry_struct_path: str = "./src/strategy/base/entry_struct.py",
+        exit_struct_path: str = "./src/strategy/base/exit_struct.py",
     ) -> None:
         self.entry_struct = entry_struct
         self.exit_struct = exit_struct
         self.num_lots = num_lots
         self.req_cols = req_cols
         self.monitor_close = monitor_close
-        self.strategy_dir = strategy_dir
         self.open_trades: deque[StockTrade] = deque()
+        self.entry_struct_path = entry_struct_path
+        self.exit_struct_path = exit_struct_path
 
     @abstractmethod
-    def gen_trades(
-        self, df_signals: pd.DataFrame
-    ) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
+    def gen_trades(self, df_signals: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Generate DataFrame containing completed trades for given strategy.
 
         Args:
@@ -115,12 +122,9 @@ class GenTrades(ABC):
         # Name of concrete class implementation of 'EntryStruct'
         class_name = STRUCT_MAPPING.get(self.entry_struct)
 
-        # File path to concrete class implementation
-        entry_struct_path = f"{self.strategy_dir}/base/entry_struct.py"
-
         # Get initialized instance of concrete class implementation
         entry_instance = get_class_instance(
-            class_name, entry_struct_path, num_lots=self.num_lots
+            class_name, self.entry_struct_path, num_lots=self.num_lots
         )
 
         # Update 'self.open_trades' with new open position
@@ -162,11 +166,8 @@ class GenTrades(ABC):
         # Name of concrete class implementation of 'ExitStruct'
         class_name = STRUCT_MAPPING.get(self.exit_struct)
 
-        # File path to concrete class implementation
-        exit_struct_path = f"{self.strategy_dir}/base/exit_struct.py"
-
         # Get initialized instance of concrete class implementation
-        exit_instance = get_class_instance(class_name, exit_struct_path)
+        exit_instance = get_class_instance(class_name, self.exit_struct_path)
 
         # Update open trades and generate completed trades
         self.open_trades, completed_trades = exit_instance.close_pos(
@@ -193,11 +194,8 @@ class GenTrades(ABC):
                 List of dictionary containing required fields to generate DataFrame.
         """
 
-        # File path to concrete class implementation
-        exit_struct_path = f"{self.strategy_dir}/base/exit_struct.py"
-
         # Get initialized instance of concrete class implementation
-        take_all_exit = get_class_instance("TakeAllExit", exit_struct_path)
+        take_all_exit = get_class_instance("TakeAllExit", self.exit_struct_path)
 
         # Update open trades and generate completed trades
         self.open_trades, completed_trades = take_all_exit.close_pos(

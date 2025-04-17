@@ -9,7 +9,7 @@ import pandas as pd
 import seaborn as sns
 from tqdm import tqdm
 
-from config.variables import COINT_CORR_FN
+from config.variables import CointCorrFn
 from src.utils import utils
 
 
@@ -89,7 +89,7 @@ class PlotCointCorr:
         fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 15))
 
         # Iterate through each ax sequentially after flattening 'axes'
-        for ax, analysis in zip(axes.flat, get_args(COINT_CORR_FN)):
+        for ax, analysis in zip(axes.flat, get_args(CointCorrFn)):
             sns.histplot(df, x=analysis, ax=ax, kde=True)
 
             # Customize graph format

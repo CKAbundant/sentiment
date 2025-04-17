@@ -71,27 +71,43 @@ class SentiTrades(GenTrades):
         num_lots (int):
             Number of lots to initiate new position each time (Default: 1).
         req_cols (list[str]):
-            List of required columns to generate trades.
+            List of required columns to generate trades
+            (Default: ["date", "high", "low", "close", "entry_signal", "exit_signal"]).
         monitor_close (bool):
             Whether to monitor close price ("close") or both high and low price
             (Default: True).
-        strategy_dir (str):
-            Relative path to strategy folder containing subfolders for implementing
-            trading strategy (Default: "./src/strategy").
         percent_loss (float):
-            If provided, percentage loss allowed for investment.
-        exit_method (ExitMethod):
-            Exit method to generate stop price.
+            Percentage loss allowed for investment (Default: 0.05).
+        stop_method (ExitMethod):
+            Exit method to generate stop price (Default: "no_stop").
+        entry_struct_path (str):
+            Relative path to 'entry_struct.py'
+            (Default: "./src/strategy/base/entry_struct.py").
+        exit_struct_path (str):
+            Relative path to 'exit_struct.py'
+            (Default: "./src/strategy/base/exit_struct.py").
+        stop_method_path (str):
+            Relative path to 'cal_exit_price.py'
+            (Default: "./src/strategy/base/cal_exit_price.py").
 
     Attributes:
         percent_loss (float):
             If provided, percentage loss allowed for investment.
-        exit_method (ExitMethod):
+        stop_method (ExitMethod):
             Exit method to generate stop price.
         no_trades (list[str]):
             List containing stock tickers with no completed trades.
         stop_list (list[dict[str, datetime | Decimal]]):
             List to record datetime, stop price and whether stop price is triggered.
+        entry_struct_path (str):
+            Relative path to 'entry_struct.py'
+            (Default: "./src/strategy/base/entry_struct.py").
+        exit_struct_path (str):
+            Relative path to 'exit_struct.py'
+            (Default: "./src/strategy/base/exit_struct.py").
+        stop_method_path (str):
+            Relative path to 'cal_exit_price.py'
+            (Default: "./src/strategy/base/cal_exit_price.py").
     """
 
     def __init__(
@@ -108,22 +124,42 @@ class SentiTrades(GenTrades):
             "exit_signal",
         ],
         monitor_close: bool = True,
-        strategy_dir: str = "./src/strategy",
-        percent_loss: float | None = None,
-        exit_method: ExitMethod | None = None,
+        percent_loss: float = 0.05,
+        stop_method: ExitMethod = "no_stop",
+        entry_struct_path: str = "./src/strategy/base/entry_struct.py",
+        exit_struct_path: str = "./src/strategy/base/exit_struct.py",
+        stop_method_path: str = "./src/strategy/base/cal_exit_price.py",
     ) -> None:
         super().__init__(
-            entry_struct, exit_struct, num_lots, req_cols, monitor_close, strategy_dir
+            entry_struct,
+            exit_struct,
+            num_lots,
+            req_cols,
+            monitor_close,
+            entry_struct_path,
+            exit_struct_path,
         )
+        self.stop_method_path = stop_method_path
 
         # Price-related stops
         self.percent_loss = percent_loss
-        self.exit_method = exit_method
+        self.stop_method = stop_method
         self.no_trades = []
         self.stop_info_list = []
 
-    def gen_trades(self, df_senti: pd.DataFrame) -> pd.DataFrame:
-        """Generate DataFrame containing completed trades for trading strategy."""
+    def gen_trades(self, df_senti: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Generate DataFrame containing completed trades for trading strategy.
+
+        Args:
+            df_senti (pd.DataFrame):
+                DataFrame containing entry and exit signals based on sentimet rating.
+
+        Returns:
+            df_trades (pd.DataFrame):
+                DataFrame containing completed trades.
+            df_signals (pd.DataFrame):
+                DataFrame containing updated exit signals price-related stops.
+        """
 
         completed_list = []
 
@@ -160,9 +196,7 @@ class SentiTrades(GenTrades):
                 continue
 
             # Check to cut loss for all open position
-            if net_pos != 0 and all(
-                item is not None for item in [self.percent_loss, self.exit_method]
-            ):
+            if net_pos != 0 and self.stop_method != "no_stop":
                 completed_list.extend(self.stop_loss(dt, high, low, close))
 
             # Check to take profit
@@ -229,7 +263,7 @@ class SentiTrades(GenTrades):
 
         completed_trades = []
 
-        # Compute stop loss price based on 'self.exit_method'
+        # Compute stop loss price based on 'self.stop_method'
         stop_price = self.cal_stop_price()
         entry_action = get_std_field(self.open_trades, "entry_action")
         display_stop_price(
@@ -271,14 +305,11 @@ class SentiTrades(GenTrades):
         """
 
         # Name of concrete class implemenation of 'CalExitPrice'
-        class_name = EXIT_PRICE_MAPPING.get(self.exit_method)
-
-        # File path to concrete class implementation of 'CalExitPrice'
-        calexitprice_path = f"{self.strategy_dir}/base/cal_exit_price.py"
+        class_name = EXIT_PRICE_MAPPING.get(self.stop_method)
 
         # Get initialized instance of concrete class implementation
         class_inst = get_class_instance(
-            class_name, calexitprice_path, percent_loss=self.percent_loss
+            class_name, self.stop_method_path, percent_loss=self.percent_loss
         )
 
         return class_inst.cal_exit_price(self.open_trades)

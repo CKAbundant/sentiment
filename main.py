@@ -11,7 +11,7 @@ repo_dir = Path(__file__).parent.as_posix()
 if repo_dir not in sys.path:
     sys.path.append(repo_dir)
 
-from config.variables import COINT_CORR_FN, HF_MODEL, IGNORE_LIST, URL
+from config.variables import IGNORE_LIST, URL
 from src.cal_coint_corr import CalCointCorr
 from src.cal_profit_loss import CalProfitLoss
 from src.download_ohlcv import DownloadOHLCV
@@ -47,7 +47,7 @@ def main() -> None:
         # Generate DataFrame containing news and sentiment scores for different
         # FinBERT variant.
         gen_data = GenData(date=date)
-        df_senti = gen_data.run()
+        gen_data.run()
 
     # Generate price action signals
     main_utils.gen_signals(cfg)

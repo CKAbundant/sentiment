@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-from config.variables import COINT_CORR_FN, HF_MODEL
+from config.variables import CointCorrFn, HfModel
 from src.utils import plot_utils, utils
 
 
@@ -371,8 +371,8 @@ class PlotStrategies:
             return utils.load_csv(combined_path)
 
         # Get FinBERT models, cointegration/correlation functions and time periods
-        hf_models = get_args(HF_MODEL)
-        coint_corr_fns = get_args(COINT_CORR_FN)
+        hf_models = get_args(HfModel)
+        coint_corr_fns = get_args(CointCorrFn)
 
         df_list = []
 
@@ -427,8 +427,8 @@ class PlotStrategies:
         top_n = top_n or self.top_n
 
         # Get FinBERT models, cointegration/correlation functions and time periods
-        hf_models = get_args(HF_MODEL)
-        coint_corr_fns = get_args(COINT_CORR_FN)
+        hf_models = get_args(HfModel)
+        coint_corr_fns = get_args(CointCorrFn)
 
         df_list, df_pivot_list = [], []
 

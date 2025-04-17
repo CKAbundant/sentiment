@@ -19,74 +19,23 @@ Considerations
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel, Field, computed_field, field_validator
+from omegaconf import DictConfig
 from tqdm import tqdm
 
-from config.variables import COINT_CORR_FN, HF_MODEL
+from config.variables import (
+    CointCorrFn,
+    EntryMethod,
+    EntryType,
+    ExitMethod,
+    HfModel,
+    StopMethod,
+)
+from src.strategy.base.stock_trade import StockTrade
 from src.utils import utils
-
-
-class StockTrade(BaseModel):
-    ticker: str = Field(description="Stock ticker")
-    coint_ticker: str = Field(description="Cointegrated stock ticker.")
-    action: str = Field(description="Either 'buy' or 'sell'", default="buy")
-    entry_date: date = Field(description="Date when opening long position")
-    entry_price: Decimal = Field(description="Price when opening long position")
-    exit_date: Optional[date] = Field(
-        description="Date when exiting long position", default=None
-    )
-    exit_price: Optional[Decimal] = Field(
-        description="Price when exiting long position", default=None
-    )
-
-    @computed_field(description="Number of days held for trade")
-    def days_held(self) -> Optional[int]:
-        if self.exit_date is not None and self.entry_date is not None:
-            days_held = self.exit_date - self.entry_date
-            return days_held.days
-        return
-
-    @computed_field(description="Profit/loss when trade completed")
-    def profit_loss(self) -> Optional[Decimal]:
-        if self.exit_price is not None and self.entry_price is not None:
-            profit_loss = self.exit_price - self.entry_price
-            return profit_loss
-        return
-
-    @computed_field(description="Percentage return of trade")
-    def percent_ret(self) -> Optional[Decimal]:
-        if self.exit_price is not None and self.entry_price is not None:
-            percent_ret = (self.exit_price - self.entry_price) / self.entry_price
-            return percent_ret.quantize(Decimal("1.000000"))
-        return
-
-    @computed_field(description="daily percentage return of trade")
-    def daily_ret(self) -> Optional[Decimal]:
-        if self.percent_ret is not None and self.days_held is not None:
-            daily_ret = (1 + self.percent_ret) ** (1 / Decimal(str(self.days_held))) - 1
-            return daily_ret.quantize(Decimal("1.000000"))
-        return
-
-    @computed_field(description="Whether trade is profitable")
-    def win(self) -> Optional[int]:
-        if (pl := self.percent_ret) is not None:
-            return int(pl > 0)
-        return
-
-    model_config = {"validate_assignment": True}
-
-    @field_validator("exit_date")
-    def validate_exit_date(
-        cls, exit_date: Optional[date], info: dict[str, Any]
-    ) -> Optional[date]:
-        if exit_date and (entry_date := info.data.get("entry_date")):
-            if exit_date < entry_date:
-                raise ValueError("Exit date must be after entry date!")
-        return exit_date
 
 
 class CalProfitLoss:
@@ -100,50 +49,122 @@ class CalProfitLoss:
         >>> df_results = cal_pl.run()
 
     Args:
-        date (str):
-            If provided, date when cointegration is performed.
-        hf_model (str):
-            Name of FinBERT model in HuggingFace (Default: "ziweichen").
-        coint_corr_fn (COINT_CORR_FN):
-            Name of function to perform either cointegration or correlation
-            (Default: "coint").
-        period (int):
-            Time period used to compute cointegration (Default: 5).
-        results_dir (str):
-            Relative path of folder containing price action for ticker pairs (i.e.
-            stock ticker and its cointegrated ticker) (Default: "./data/results").
-
-    Attributes:
+        path (DictConfig):
+            OmegaConf DictConfig containing required folder and file paths.
         date (str):
             If provided, date when news are scraped.
-        model_dir (str):
-            Relative path of folder containing summary reports for specific
-            model and cointegration period.
-        price_action_dir (str):
-            Relative path of folder containing price action of ticker pairs for specific
-            model and cointegration period.
+        entry_type (EntryType):
+            Whether to allow long ("long"), short ("short") or
+            both long and short position ("longshort").
+        entry_signal (str):
+            Name of python script containing concrete implemenation of 'EntrySignal'.
+        exit_signal (str):
+            Name of python script containing concrete implementation of 'ExitSignal'.
+        trades_method (str):
+            Name of python script containing concrete implementation of 'GenTrades'.
+        entry_struct (EntryMethod):
+            Whether to allow multiple open position ("mulitple") or single
+            open position at a time ("single") (Default: "multiple").
+        exit_struct (ExitMethod):
+            Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
+            take profit for half open positions repeatedly ("half_life") or
+            take profit for all open positions ("take_all") (Default: "take_all").
+        stop_method (ExitMethod):
+            Exit method to generate stop price.
+        hf_model (HfModel):
+            Name of FinBERT model in Huggi[ngFace (Default: "ziweichen").
+        coint_corr_fn (CointCorrFn):
+            Name of function to perform either cointegration or correlation.
+        period (int):
+            Time period used to compute cointegration (Default: 5).
+
+    Attributes:
+        path (DictConfig):
+            OmegaConf DictConfig containing required folder and file paths.
+        date (str):
+            If provided, date when news are scraped.
+        entry_type (EntryType):
+            Whether to allow long ("long"), short ("short") or
+            both long and short position ("longshort").
+        entry_signal (str):
+            Name of python script containing concrete implemenation of 'EntrySignal'.
+        exit_signal (str):
+            Name of python script containing concrete implementation of 'ExitSignal'.
+        trades_method (str):
+            Name of python script containing concrete implementation of 'GenTrades'.
+        entry_struct (EntryMethod):
+            Whether to allow multiple open position ("mulitple") or single
+            open position at a time ("single") (Default: "multiple").
+        exit_struct (ExitMethod):
+            Whether to apply first-in-first-out ("fifo"), last-in-first-out ("lifo"),
+            take profit for half open positions repeatedly ("half_life") or
+            take profit for all open positions ("take_all") (Default: "take_all").
+        stop_method (ExitMethod):
+            Exit method to generate stop price.
+        hf_model (HfModel):
+            Name of FinBERT model in Huggi[ngFace (Default: "ziweichen").
+        coint_corr_fn (CointCorrFn):
+            Name of function to perform either cointegration or correlation.
+        period (int):
+            Time period used to compute cointegration (Default: 5).
         open_trades (list[StockTrade]):
             List containing only open trades
         num_open (int):
             Counter for number of existing open trades.
         no_trades (list[str]):
             List containing stock tickers with no completed trades.
+        model_dir (str):
+            Relative path of folder containing summary reports for specific
+            model and cointegration period.
+        price_action_dir (str):
+            Relative path of folder containing price action of ticker pairs for specific
+            model and cointegration period.
     """
 
     def __init__(
         self,
+        path: DictConfig,
         date: str | None = None,
-        hf_model: HF_MODEL = "ziweichen",
-        coint_corr_fn: COINT_CORR_FN = "coint",
+        entry_type: EntryType = "long",
+        entry_signal: str = "SentiEntry",
+        exit_signal: str = "SentiExit",
+        trades_method: str = "SentiTrades",
+        entry_struct: EntryMethod = "multiple",
+        exit_struct: ExitMethod = "take_all",
+        stop_method: StopMethod = "no_stop",
+        hf_model: HfModel = "ziweichen",
+        coint_corr_fn: CointCorrFn = "coint",
         period: int = 5,
-        results_dir: str = "./data/results",
     ) -> None:
+        self.path = path
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
+        self.entry_type = entry_type
+        self.entry_signal = entry_signal
+        self.exit_signal = exit_signal
+        self.trades_method = trades_method
+        self.entry_struct = entry_struct
+        self.exit_struct = exit_struct
+        self.stop_method = stop_method
+        self.hf_model = hf_model
+        self.coint_corr_fn = coint_corr_fn
+        self.period = period
         self.open_trades = []
         self.num_open = 0
         self.no_trades = []
+
+        # Generate required file paths
+        self.gen_paths()
+
+    def gen_paths(self) -> None:
+        """Generate required file paths i.e. 'coint_corr_path', 'senti_path',
+        'model_dir' and 'price_action_dir'."""
+
+        # Generate required folder and file paths
+        date_dir = f"{self.path.data_dir}/{self.date}"
         self.model_dir = (
-            f"{results_dir}/{self.date}/{hf_model}_{coint_corr_fn}_{period}"
+            f"{date_dir}/"
+            f"{self.entry_type}_{self.entry_struct}_{self.exit_struct}_{self.stop_method}/"
+            f"{self.hf_model}_{self.coint_corr_fn}_{self.period}"
         )
         self.price_action_dir = f"{self.model_dir}/price_actions"
 
@@ -174,139 +195,12 @@ class CalProfitLoss:
                 "csv files available for profit loss computation."
             )
 
-        # List to store DataFrames containing completed trades info
-        results_list = []
-
-        # Iterate through all csv files in 'price_action_dir'
-        for file_path in tqdm(Path(self.price_action_dir).rglob("*.csv")):
-            # Load price action csv file
-            df = utils.load_csv(file_path)
-
-            # Get ticker and cointegrated ticker from file name
-            ticker, coint_ticker = self.get_tickers(file_path)
-
-            # Append DataFrame containining completed trades for cointegrated ticker
-            results_list.append(self.record_trades(df, ticker, coint_ticker))
-
-        # Combine all DataFrames
-        df_results = pd.concat(results_list, axis=0).reset_index(drop=True)
-
-        # Create folder if not exist
-        utils.create_folder(self.model_dir)
-
-        # Save combined DataFrame
-        utils.save_csv(
-            df_results, f"{self.model_dir}/trade_results.csv", save_index=False
-        )
-
         # Generate overall and breakdown summary
         df_overall = self.gen_overall_summary()
         df_breakdown = self.gen_breakdown_summary()
         df_top_ret_pair = self.gen_top_ret_pair(df_breakdown)
 
-        return df_results, df_overall, df_breakdown, df_top_ret_pair
-
-    def get_tickers(self, file_path: Path) -> list[str, str]:
-        """Get stock ticker and its cointegrated stock tick from file path."""
-
-        return file_path.stem.split("_")
-
-    def record_trades(
-        self, data: pd.DataFrame, ticker: str, coint_ticker: str
-    ) -> pd.DataFrame:
-        """Iterate through each row to record completed trades.
-
-        Args:
-            data (pd.DataFrame):
-                DataFrame containing price action generated from sentiment
-                ratings for specific ticker.
-            ticker (str):
-                Stock ticker whose news articles are sentiment rated.
-            coint_ticker (str):
-                Stock ticker which is among the top 10 stocks with lowest
-                cointegration pvalue.
-
-        Returns:
-            (pd.DataFrame): DataFrame containing completed trades info.
-        """
-
-        coint_close = f"{coint_ticker}_close"
-
-        # Filter out null values for cointegrated stock close price
-        df = data.loc[
-            ~data[coint_close].isna(), ["date", coint_close, "action"]
-        ].reset_index(drop=True)
-
-        completed_trades = []
-
-        for idx, dt, price, action in df.itertuples(index=True, name=None):
-            # Close all open positions at end of trading period
-            if idx >= len(df) - 1 and self.num_open > 0:
-                completed_trades.extend(self.update_sell_info(dt, price))
-
-            elif action == "buy":
-                stock_trade = StockTrade(
-                    ticker=ticker,
-                    coint_ticker=coint_ticker,
-                    action=action,
-                    entry_date=dt,
-                    entry_price=Decimal(str(price)),
-                )
-                self.open_trades.append(stock_trade)
-                self.num_open += 1
-
-            elif action == "sell" and self.num_open > 0:
-                # Update existing StockTrade objects and remove from self.open_trades
-                completed_trades.extend(self.update_sell_info(dt, price))
-
-            else:
-                # No short position. Sell to close long position
-                continue
-
-        # No completed trades recorded
-        if not completed_trades:
-            self.no_trades.append(ticker)
-
-        return pd.DataFrame(completed_trades)
-
-    def update_sell_info(self, dt: date, price: float) -> list[dict[str, Any]]:
-        """Update existing StockTrade objects and remove from self.open_trades.
-
-        Args:
-            dt (date):
-                datetime.date object of trade date.
-            price (float):
-                Closing price of cointegrated stock.
-
-        Returns:
-            (list[dict[str, Any]]):
-                List of dictionaries containing required fields to generate DataFrame.
-        """
-
-        updated_trades = []
-
-        for trade in self.open_trades:
-            # Update StockTrade objects with exit info
-            trade.exit_date = dt
-            trade.exit_price = Decimal(str(price))
-
-            # Convert StockTrade to dictionary only if all fields are populated
-            # i.e. trade completed.
-            if self.validate_completed_trades(trade):
-                updated_trades.append(trade.model_dump())
-
-        # Reset self.open_trade and self.num_open
-        if len(updated_trades) == len(self.open_trades):
-            self.open_trades = []
-            self.num_open = 0
-
-        return updated_trades
-
-    def validate_completed_trades(self, stock_trade: StockTrade) -> bool:
-        """Check if all the fields in StockTrade object are not null i.e.
-        all trade info (both entry and exit) are available."""
-
-        return all(field is not None for field in stock_trade.model_dump().values())
+        return df_overall, df_breakdown, df_top_ret_pair
 
     def gen_overall_summary(self) -> pd.DataFrame:
         """Generate summary info from 'trade_results.csv'."""
@@ -391,13 +285,16 @@ class CalProfitLoss:
             }
         )
 
+        # Flatten multi-level columns and index for ease of processing
+        df.columns = ["_".join(col_tuple) for col_tuple in df.columns]
+
         # 'mean' and 'median' operation generates float output
         # Round to 6 decimal places and convert to decimal type
         df_breakdown = utils.set_decimal_type(df_breakdown, to_round=True)
 
         # Append 'trading_period' column
-        days_held = pd.to_datetime(df_breakdown[("exit_date", "max")]) - pd.to_datetime(
-            df_breakdown[("entry_date", "min")]
+        days_held = pd.to_datetime(df_breakdown["exit_date_max"]) - pd.to_datetime(
+            df_breakdown["entry_date_min"]
         )
         df_breakdown["trading_period"] = days_held.map(
             lambda delta: Decimal(str(delta.days))
@@ -411,7 +308,7 @@ class CalProfitLoss:
             lambda num: num.quantize(Decimal("1.000000"))
         )
 
-        # Append 'annualized_returns' column
+        # Append 'daily_returns' column
         daily_ret = (1 + df_breakdown["overall_percent_ret"]) ** (
             1 / df_breakdown["trading_period"]
         ) - 1
@@ -419,10 +316,41 @@ class CalProfitLoss:
             lambda num: num.quantize(Decimal("1.000000"))
         )
 
+        # Append negative returns statistic
+        df_breakdown = self.append_neg_rets(df_breakdown)
+
         # Save as csv file
         utils.save_csv(
-            df_breakdown, f"{self.model_dir}/breakdown_summary.csv", save_index=True
+            df_breakdown, f"{self.model_dir}/breakdown_summary.csv", save_index=False
         )
+
+        return df_breakdown
+
+    def append_neg_rets(self, df_breakdown: pd.DataFrame) -> pd.DataFrame:
+        """Append the min, max, mean and median negative returns to
+        breakdown summary DataFrame."""
+
+        # Extract only negative returns from 'trade_results.csv'
+        df = utils.load_csv(f"{self.model_dir}/trade_results.csv")
+        df = df.loc[df["win"] == 0, ["percent_ret"]]
+
+        # Get min, max, mean and median 'profit_loss'
+        df_neg = df.groupby(by=["ticker", "coint_corr_ticker"]).agg(
+            {"percent_ret": ["min", "max", "mean", "median"]}
+        )
+
+        # Collapse multi-index columns and rename columns
+        df_neg.columns = [
+            "neg_ret_min",
+            "neg_ret_max",
+            "neg_ret_mean",
+            "neg_ret_median",
+        ]
+
+        # Ensure both DataFrame index are the same before performing join
+        if df.index.names == df_breakdown.index.names:
+            # Append negative columns to 'df_breakdown'
+            df_breakdown = df_breakdown.join(df_neg)
 
         return df_breakdown
 

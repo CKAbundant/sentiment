@@ -23,9 +23,6 @@ class TradingStrategy:
         >>> strategy.run()
 
     Args:
-        entry_type (EntryType):
-            Types of open positions allowed either 'long', 'short' or
-            'longshort'.
         entry (EntrySignal):
             Class instance of concrete implementation of 'EntrySignal' abstract class.
         exit (ExitSignal):
@@ -36,9 +33,6 @@ class TradingStrategy:
             Class instance of concrete implementation of 'GetTrades' abstract class.
 
     Attributes:
-        entry_type (EntryType):
-            Types of open positions allowed either 'long', 'short' or
-            'longshort'.
         entry (EntrySignal):
             Class instance of concrete implementation of 'EntrySignal' abstract class.
         exit (ExitSignal):
@@ -49,17 +43,13 @@ class TradingStrategy:
 
     def __init__(
         self,
-        entry_type: EntryType,
-        entry: Type[EntrySignal],
-        exit: Type[ExitSignal],
+        entry: EntrySignal,
+        exit: ExitSignal,
         trades: GenTrades,
-        percent_drawdown: float = 0.2,
     ) -> None:
-        self.entry_type = entry_type
-        self.entry = entry(entry_type)
-        self.exit = exit(entry_type)
+        self.entry = entry
+        self.exit = exit
         self.trades = trades
-        self.percent_drawdown = percent_drawdown
 
     def __call__(self, df_ohlcv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Generate completed trades based on trading strategy i.e.
@@ -77,7 +67,7 @@ class TradingStrategy:
 
         # Append entry and exit signal
         df_pa = self.entry.gen_entry_signal(df_ohlcv)
-        df_signals = self.exit.gen_exit_signal(df_pa)
+        df_pa = self.exit.gen_exit_signal(df_pa)
 
         # Generate trades
         df_trades, df_signals = self.trades.gen_trades(df_pa)

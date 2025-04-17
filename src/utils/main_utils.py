@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from omegaconf import DictConfig
 
-from config.variables import COINT_CORR_FN, HF_MODEL
+from config.variables import CointCorrFn, HfModel
 from src.cal_profit_loss import CalProfitLoss
 from src.gen_price_action import GenPriceAction
 from src.utils import utils
@@ -17,21 +17,13 @@ from src.utils import utils
 def gen_signals(date: str, cfg: DictConfig) -> None:
     """Generate price signals for single strategy or all strategies combinations."""
 
-    params = {
-        "date": date,
-        "top_n": cfg.top_n_tickers,
-        "data_dir": cfg.data_dir,
-        "stock_dir": cfg.stock_dir,
-        "coint_corr_dir": cfg.coint_corr_dir,
-    }
-
     if cfg.test_all:
         # Test out different strategies
-        run_strategies(params, cfg.full)
+        run_strategies(cfg.std, cfg.full)
 
     else:
         # Test specific strategy
-        gen_pa = GenPriceAction(params, cfg.single)
+        gen_pa = GenPriceAction(**cfg.single, **cfg.std)
         gen_pa.run()
 
 
@@ -41,8 +33,8 @@ def run_strategies(params: dict[str, Any], full: DictConfig) -> None:
 
     Args:
         params (dict[str, Any]):
-            Dictionary containing additional parameters i.e. 'date', 'top_n',
-            and file paths required to initialze 'GenPriceAction' class.
+            Dictionary containing additional parameters required to
+            initialze 'GenPriceAction' class.
         full (DictConfig):
             OmegaConf DictConfig object containing parameters for running all
             strategies.
@@ -52,8 +44,8 @@ def run_strategies(params: dict[str, Any], full: DictConfig) -> None:
     """
 
     # # Get FinBERT models, cointegration/correlation functions and time periods
-    # hf_models = get_args(HF_MODEL)
-    # coint_corr_fns = get_args(COINT_CORR_FN)
+    # hf_models = get_args(HfModel)
+    # coint_corr_fns = get_args(CointCorrFn)
     # periods = (1, 3, 5)
 
     # for hf_model, coint_corr_fn, period in product(hf_models, coint_corr_fns, periods):
@@ -80,7 +72,6 @@ def run_strategies(params: dict[str, Any], full: DictConfig) -> None:
     ) in combi_list:
         # Generate price actions of top 10 cointegrated/correlated stocks
         gen_pa = GenPriceAction(
-            date=params["date"],
             entry_type=ent_type,
             entry_struct=ent_struct,
             exit_struct=ex_struct,
@@ -88,10 +79,7 @@ def run_strategies(params: dict[str, Any], full: DictConfig) -> None:
             hf_model=hf_model,
             coint_corr_fn=coint_corr_fn,
             period=period,
-            top_n=params["top_n"],
-            data_dir=params["data_dir"],
-            stock_dir=params["stock_dir"],
-            coint_corr_dir=params["coint_corr_dir"],
+            **params,
         )
         gen_pa.run()
 
