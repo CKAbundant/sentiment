@@ -16,15 +16,12 @@ Considerations
 - All trades closed at end of simulation.
 """
 
-from datetime import date
+from collections import deque
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
 
-import numpy as np
 import pandas as pd
 from omegaconf import DictConfig
-from tqdm import tqdm
 
 from config.variables import (
     CointCorrFn,
@@ -39,14 +36,15 @@ from src.utils import utils
 
 
 class CalProfitLoss:
-    """Compute profit and loss based on sentiment strategy.
+    """Compute profit and loss for specific combination of 'entry_type',
+    'entry_signal', 'exit_signal' and 'trades_method'.
 
     - Iterate all csv files containing price action for cointegrated stocks in folder.
     - Compute P&L for each file and record each completed trade in DataFrame.
 
     Usage:
         >>> cal_pl = CalProfitLoss()
-        >>> df_results = cal_pl.run()
+        >>> df_overall, df_breakdown, df_top_ret_pair = cal_pl.run()
 
     Args:
         path (DictConfig):
@@ -56,12 +54,6 @@ class CalProfitLoss:
         entry_type (EntryType):
             Whether to allow long ("long"), short ("short") or
             both long and short position ("longshort").
-        entry_signal (str):
-            Name of python script containing concrete implemenation of 'EntrySignal'.
-        exit_signal (str):
-            Name of python script containing concrete implementation of 'ExitSignal'.
-        trades_method (str):
-            Name of python script containing concrete implementation of 'GenTrades'.
         entry_struct (EntryMethod):
             Whether to allow multiple open position ("mulitple") or single
             open position at a time ("single") (Default: "multiple").
@@ -86,12 +78,6 @@ class CalProfitLoss:
         entry_type (EntryType):
             Whether to allow long ("long"), short ("short") or
             both long and short position ("longshort").
-        entry_signal (str):
-            Name of python script containing concrete implemenation of 'EntrySignal'.
-        exit_signal (str):
-            Name of python script containing concrete implementation of 'ExitSignal'.
-        trades_method (str):
-            Name of python script containing concrete implementation of 'GenTrades'.
         entry_struct (EntryMethod):
             Whether to allow multiple open position ("mulitple") or single
             open position at a time ("single") (Default: "multiple").
@@ -107,12 +93,6 @@ class CalProfitLoss:
             Name of function to perform either cointegration or correlation.
         period (int):
             Time period used to compute cointegration (Default: 5).
-        open_trades (list[StockTrade]):
-            List containing only open trades
-        num_open (int):
-            Counter for number of existing open trades.
-        no_trades (list[str]):
-            List containing stock tickers with no completed trades.
         model_dir (str):
             Relative path of folder containing summary reports for specific
             model and cointegration period.
@@ -126,9 +106,6 @@ class CalProfitLoss:
         path: DictConfig,
         date: str | None = None,
         entry_type: EntryType = "long",
-        entry_signal: str = "SentiEntry",
-        exit_signal: str = "SentiExit",
-        trades_method: str = "SentiTrades",
         entry_struct: EntryMethod = "multiple",
         exit_struct: ExitMethod = "take_all",
         stop_method: StopMethod = "no_stop",
@@ -139,18 +116,12 @@ class CalProfitLoss:
         self.path = path
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.entry_type = entry_type
-        self.entry_signal = entry_signal
-        self.exit_signal = exit_signal
-        self.trades_method = trades_method
         self.entry_struct = entry_struct
         self.exit_struct = exit_struct
         self.stop_method = stop_method
         self.hf_model = hf_model
         self.coint_corr_fn = coint_corr_fn
         self.period = period
-        self.open_trades = []
-        self.num_open = 0
-        self.no_trades = []
 
         # Generate required file paths
         self.gen_paths()
@@ -267,6 +238,8 @@ class CalProfitLoss:
 
         return df_overall
 
+        return df
+
     def gen_breakdown_summary(self) -> pd.DataFrame:
         """Generate breakdown summary for each ticker-cointegrated ticker pair."""
 
@@ -286,7 +259,10 @@ class CalProfitLoss:
         )
 
         # Flatten multi-level columns and index for ease of processing
-        df.columns = ["_".join(col_tuple) for col_tuple in df.columns]
+        df.columns = [
+            "_".join(col_tuple) if col_tuple[1] != "" else col_tuple[0]
+            for col_tuple in df.columns
+        ]
 
         # 'mean' and 'median' operation generates float output
         # Round to 6 decimal places and convert to decimal type
@@ -301,9 +277,7 @@ class CalProfitLoss:
         )
 
         # Append 'percent_ret' column rounded to nearest 6 significant figures
-        percent_ret = (
-            df_breakdown[("profit_loss", "sum")] / df_breakdown[("entry_price", "sum")]
-        )
+        percent_ret = df_breakdown["profit_loss_sum"] / df_breakdown["entry_price_sum"]
         df_breakdown["overall_percent_ret"] = percent_ret.map(
             lambda num: num.quantize(Decimal("1.000000"))
         )
@@ -323,6 +297,10 @@ class CalProfitLoss:
         utils.save_csv(
             df_breakdown, f"{self.model_dir}/breakdown_summary.csv", save_index=False
         )
+
+        # Reset multi-index if present
+        if df_breakdown.index.names[0] == "ticker":
+            df_breakdown = df_breakdown.reset_index()
 
         return df_breakdown
 
@@ -360,32 +338,27 @@ class CalProfitLoss:
 
         Args:
             df_summary (pd.DataFrame):
-                Multi-level DataFrame containing aggregated values of completed trades.
+                DataFrame containing aggregated values of completed trades.
 
         Returns:
             df_highest (pd.DataFrame):
-                Multi-level DataFrame containing ticker pair with highest annualized
+                DataFrame containing ticker pair with highest annualized
                 return for each ticker.
         """
 
         df = df_breakdown.copy()
 
-        # Group by ticker i.e. level 0
-        grouped = df.groupby(level=0)
-
-        # Get ticker pair with highest annualized returns for each ticker
-        highest_pairs = grouped.apply(
-            lambda group: group.loc[group["overall_daily_ret"].idxmax()].name
-        )
-
-        # DataFrame filtered by 'highest_pairs'
-        df_highest = df.loc[highest_pairs, :].sort_values(
-            by=["overall_daily_ret"], ascending=False
+        # Get ticker pair with highest daily return for each unique ticker
+        max_ret_idx = df.groupby(by=["ticker"])["overall_daily_ret"].idxmax()
+        df_highest = (
+            df.loc[max_ret_idx, :]
+            .sort_values(by=["overall_daily_ret"], ascending=False)
+            .reset_index(drop=True)
         )
 
         # Save as csv file
         utils.save_csv(
-            df_highest, f"{self.model_dir}/top_ticker_pairs.csv", save_index=True
+            df_highest, f"{self.model_dir}/top_ticker_pairs.csv", save_index=False
         )
 
         return df_highest

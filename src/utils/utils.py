@@ -204,17 +204,20 @@ def load_csv(
     file_path: str,
     header: list[int] | None = "infer",
     index_col: list[int] | None = None,
+    tz: str | None = None,
 ) -> pd.DataFrame:
     """Load DataFrame and convert numeric columns to Decimal type.
 
     Args:
         file_path (str):
             Relative patht to csv file.
-        header (list[int] | str = "infer"):
+        header (list[int] | str):
             If provided, list of row numbers containing column labels
             (Default: "infer").
-        index_col (list[int] | None = None):
+        index_col (list[int] | None):
             If provided, list of columns to use as row labels.
+        tz (str | None):
+            If provided, timezone for datetime object e.g. "America/New_York".
 
     Returns:
         df (pd.DataFrame): Loaded DataFrame (including multi-level).
@@ -226,7 +229,7 @@ def load_csv(
     # Ensure all numbers are set to Decimal type and all dates are set
     # to datetime.date type
     df = set_decimal_type(df)
-    df = set_date_type(df)
+    df = set_date_type(df, tz)
 
     if isinstance(header, list):
         # Remove 'Unnamed' from multi-level columns
@@ -324,8 +327,16 @@ def set_decimal_type(data: pd.DataFrame, to_round: bool = False) -> pd.DataFrame
     return df
 
 
-def set_date_type(data: pd.DataFrame) -> pd.DataFrame:
-    """Ensure all datetime objects in DataFrame are set to datetime.date type."""
+def set_date_type(data: pd.DataFrame, tz: str | None = None) -> pd.DataFrame:
+    """Ensure all datetime objects in DataFrame are set to datetime.date type.
+
+    Args:
+        data (pd.DataFrame): DataFrame containing date related columns.
+        tz (str | None): If provided, timezone for datetime e.g. "America/New_York".
+
+    Returns:
+        (pd.DataFrame): DataFrame with date related columns set to datetime type.
+    """
 
     df = data.copy()
 
@@ -339,7 +350,11 @@ def set_date_type(data: pd.DataFrame) -> pd.DataFrame:
 
     # Convert date to datetime type
     for col in date_cols:
-        df[col] = pd.to_datetime(df[col])
+        if tz:
+            df[col] = pd.to_datetime(df[col], utc=True)
+            df[col] = df[col].dt.tz_convert(tz)
+        else:
+            df[col] = pd.to_datetime(df[col])
 
     return df
 

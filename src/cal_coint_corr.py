@@ -12,7 +12,7 @@ from scipy import stats
 from statsmodels.tsa.stattools import coint
 from tqdm import tqdm
 
-from config.variables import CORR_FN
+from config.variables import CorrFn
 from src.utils import utils
 
 
@@ -80,7 +80,7 @@ class CalCointCorr:
         self.stock_dir = stock_dir
         self.coint_corr_dir = coint_corr_dir
         self.coint_corr_date_dir = f"{coint_corr_dir}/{self.date}"
-        self.corr_fn_list = corr_fn_list or get_args(CORR_FN)
+        self.corr_fn_list = corr_fn_list or get_args(CorrFn)
 
     def run(self) -> None:
         """Generate DataFrame containing correlation and cointegration between

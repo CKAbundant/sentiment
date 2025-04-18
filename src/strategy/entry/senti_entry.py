@@ -48,9 +48,6 @@ class SentiEntry(base.EntrySignal):
         if self.rating_col not in df.columns:
             raise ValueError(f"'{self.rating_col}' column is not available!")
 
-        # Ensure 'median_rating_excl' is integer type
-        df[self.rating_col] = df[self.rating_col].astype(int)
-
         if self.entry_type == "long":
             df["entry_signal"] = df[self.rating_col].map(self._gen_long_signal)
 
@@ -67,20 +64,20 @@ class SentiEntry(base.EntrySignal):
     def _gen_long_signal(self, rating: int) -> str:
         """Generate buy signal if rating >= 4"""
 
-        return "buy" if rating >= 4 else "wait"
+        return "buy" if rating and rating >= 4 else "wait"
 
     def _gen_short_signal(self, rating: int) -> str:
         """Generate sell signal if rating <= 2"""
 
-        return "sell" if rating <= 2 else "wait"
+        return "sell" if rating and rating <= 2 else "wait"
 
     def _gen_long_short_signal(self, rating: int) -> str:
         """Generate buy signal if rating >= 4 or sell signal if rating <= 2."""
 
-        if rating >= 4:
+        if rating and rating >= 4:
             return "buy"
 
-        if rating <= 2:
+        if rating and rating <= 2:
             return "sell"
 
         return "wait"

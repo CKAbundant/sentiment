@@ -57,6 +57,8 @@ class GenPriceAction:
     Args:
         path (DictConfig):
             OmegaConf DictConfig containing required folder and file paths.
+        snp500_list (list[str]):
+            List of S&P 500 list.
         date (str):
             If provided, date when news are scraped.
         entry_type (EntryType):
@@ -99,6 +101,8 @@ class GenPriceAction:
     Attributes:
         path (DictConfig):
             OmegaConf DictConfig containing required folder and file paths.
+        snp500_list (list[str]):
+            List of S&P 500 list.
         date (str):
             If provided, date when news are scraped.
         entry_type (EntryType):
@@ -154,6 +158,7 @@ class GenPriceAction:
     def __init__(
         self,
         path: DictConfig,
+        snp500_list: list[str],
         date: str | None = None,
         entry_type: EntryType = "long",
         entry_signal: str = "SentiEntry",
@@ -179,6 +184,7 @@ class GenPriceAction:
         top_n: int = 10,
     ) -> None:
         self.path = path
+        self.snp500_list = snp500_list
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.entry_type = entry_type
         self.entry_signal = entry_signal
@@ -262,7 +268,7 @@ class GenPriceAction:
                 f"'{csv_path.name}' is not available at '{csv_path}'. "
                 f"Proceed to generate '{csv_path.name}'..."
             )
-            cal_coint_corr = CalCointCorr(date=self.date)
+            cal_coint_corr = CalCointCorr(snp500_list=self.snp500_list, date=self.date)
             cal_coint_corr.run()
 
         return pd.read_csv(self.coint_corr_path)
@@ -350,6 +356,8 @@ class GenPriceAction:
         for coint_corr_ticker in coint_corr_list:
             # Generate and save DataFrame for each cointegrated stock
             df_coint_corr_ticker = self.append_coint_corr_ohlc(df, coint_corr_ticker)
+
+            print(f"df_coint_corr_ticker ({ticker}) : \n\n{df_coint_corr_ticker}\n")
 
             # Load Sentiment Strategy
             trading_strategy = self.gen_strategy()
@@ -462,7 +470,7 @@ class GenPriceAction:
         """Append OHLC data of cointegrated stocks."""
 
         # Load OHLCV prices for ticker
-        ohlcv_path = f"{self.stock_dir}/{coint_corr_ticker}.parquet"
+        ohlcv_path = f"{self.path.stock_dir}/{coint_corr_ticker}.parquet"
         df_ohlcv = pd.read_parquet(ohlcv_path)
 
         # Ensure both df.index and df_ohlcv are datetime objects
@@ -489,7 +497,7 @@ class GenPriceAction:
         df.columns = [col.lower() for col in df.columns]
 
         # Ensure no missing values at 'ticker' column
-        df["ticker"] = df["ticker"].ffill()
+        df["ticker"] = df["ticker"].ffill().bfill()
 
         # Insert 'day_name' column just after 'ticker' column
         df = self.append_dayname(df)

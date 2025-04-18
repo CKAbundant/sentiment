@@ -177,16 +177,16 @@ class SentiTrades(GenTrades):
         for idx, dt, high, low, close, ent_sig, ex_sig in df.itertuples(
             index=True, name=None
         ):
-            print(f"idx : {idx}")
-            print(f"dt : {dt}")
-            print(f"close : {close}")
-            print(f"ent_sig : {ent_sig}")
-            print(f"ex_sig : {ex_sig}")
+            # print(f"idx : {idx}")
+            # print(f"dt : {dt}")
+            # print(f"close : {close}")
+            # print(f"ent_sig : {ent_sig}")
+            # print(f"ex_sig : {ex_sig}")
 
             # Get net position and whether end of DataFrame
             net_pos = self.get_net_pos()
             is_end = idx >= len(df) - 1
-            print(f"net_pos : {net_pos}")
+            # print(f"net_pos : {net_pos}")
 
             # Close off all open positions at end of trading period
             if is_end and net_pos != 0:
@@ -216,9 +216,9 @@ class SentiTrades(GenTrades):
             if ent_sig == "buy" or ent_sig == "sell":
                 self.open_pos(coint_corr_ticker, dt, ent_sig, close)
 
-            print(f"net_pos after update : {self.get_net_pos()}")
-            print(f"len(self.open_trades) : {len(self.open_trades)}")
-            display_open_trades(self.open_trades)
+            # print(f"net_pos after update : {self.get_net_pos()}")
+            # print(f"len(self.open_trades) : {len(self.open_trades)}")
+            # display_open_trades(self.open_trades)
 
         # No completed trades recorded
         if not completed_list:
@@ -266,9 +266,9 @@ class SentiTrades(GenTrades):
         # Compute stop loss price based on 'self.stop_method'
         stop_price = self.cal_stop_price()
         entry_action = get_std_field(self.open_trades, "entry_action")
-        display_stop_price(
-            self.monitor_close, stop_price, entry_action, high, low, close
-        )
+        # display_stop_price(
+        #     self.monitor_close, stop_price, entry_action, high, low, close
+        # )
 
         cond_list = [
             self.monitor_close and entry_action == "buy" and close < stop_price,
@@ -280,7 +280,7 @@ class SentiTrades(GenTrades):
         # Exit all open positions if any condition in 'cond_list' is true
         if any(cond_list):
             exit_action = "sell" if entry_action == "buy" else "buy"
-            print(f"\nStop triggered -> {exit_action} @ stop price {stop_price}\n")
+            # print(f"\nStop triggered -> {exit_action} @ stop price {stop_price}\n")
 
             completed_trades.extend(self.exit_all(dt, stop_price))
             self.stop_info_list.append(

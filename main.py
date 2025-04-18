@@ -30,10 +30,10 @@ def main() -> None:
     cfg = utils.load_config()
     date = cfg.date or utils.get_current_dt(fmt="%Y-%m-%d")
 
-    if cfg.download_ohlcv:
-        # Generate list of S&P500 stocks
-        snp500_list = utils.gen_snp500_list(URL, IGNORE_LIST)
+    # Generate list of S&P500 stocks
+    snp500_list = utils.gen_snp500_list(URL, IGNORE_LIST)
 
+    if cfg.download_ohlcv:
         # Download OHLCV data for S&P500 stocks
         download_ohlcv = DownloadOHLCV(snp500_list=snp500_list, end_date=date)
         download_ohlcv.run()
@@ -50,7 +50,7 @@ def main() -> None:
         gen_data.run()
 
     # Generate price action signals
-    main_utils.gen_signals(cfg)
+    main_utils.gen_signals(date=date, snp500_list=snp500_list, cfg=cfg)
 
     if cfg.plot_graph:
         plot_news = PlotNews(date=date)
