@@ -8,9 +8,9 @@ Considerations
 - No market slippage and no commission to simplify proof of concept.
 - Capture each trade in DataFrame:
     - 'ticker' -> Cointegrated stock ticker.
-    - 'entry_date' -> Date when opening long position.
+    - 'entry_datetime' -> Date when opening long position.
     - 'entry_price' -> Price when opening long position.
-    - 'exit_date' -> Date when exiting long position.
+    - 'exit_datetime' -> Date when exiting long position.
     - 'exit_price' -> Price when exiting long position.
     - 'profit_loss' -> Profit loss made.
 - All trades closed at end of simulation.
@@ -49,6 +49,8 @@ class CalProfitLoss:
     Args:
         path (DictConfig):
             OmegaConf DictConfig containing required folder and file paths.
+        no_trades (list[str]):
+            List of news tickers with no completed trades.
         date (str):
             If provided, date when news are scraped.
         entry_type (EntryType):
@@ -73,6 +75,8 @@ class CalProfitLoss:
     Attributes:
         path (DictConfig):
             OmegaConf DictConfig containing required folder and file paths.
+        no_trades (list[str]):
+            List of news tickers with no completed trades.
         date (str):
             If provided, date when news are scraped.
         entry_type (EntryType):
@@ -104,6 +108,7 @@ class CalProfitLoss:
     def __init__(
         self,
         path: DictConfig,
+        no_trades: list[str],
         date: str | None = None,
         entry_type: EntryType = "long",
         entry_struct: EntryMethod = "multiple",
@@ -114,6 +119,7 @@ class CalProfitLoss:
         period: int = 5,
     ) -> None:
         self.path = path
+        self.no_trades = no_trades
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.entry_type = entry_type
         self.entry_struct = entry_struct
@@ -176,10 +182,12 @@ class CalProfitLoss:
     def gen_overall_summary(self) -> pd.DataFrame:
         """Generate summary info from 'trade_results.csv'."""
 
-        df = utils.load_csv(f"{self.model_dir}/trade_results.csv")
+        df = utils.load_csv(
+            f"{self.model_dir}/trade_results.csv", tz="America/New_York"
+        )
 
         # Get info on stock tickers used to generate news articles
-        no_trades = sorted(list(set(self.no_trades)))
+        no_trades = self.no_trades
         trades = df["ticker"].unique().tolist()
         num_tickers_with_no_trades = len(no_trades)
         num_tickers_with_trades = len(trades)
@@ -189,8 +197,8 @@ class CalProfitLoss:
         total_trades = len(df)
         total_wins = df["win"].sum()
         total_loss = total_trades - total_wins
-        first_entry_date = df["entry_date"].min()
-        last_exit_date = df["exit_date"].max()
+        first_entry_date = df["entry_datetime"].min()
+        last_exit_date = df["exit_datetime"].max()
         trading_period = Decimal((last_exit_date - first_entry_date).days)
 
         # Profit/loss info
@@ -201,8 +209,18 @@ class CalProfitLoss:
             Decimal("1.000000")
         )
 
+        # Separate losing and winning trades
+        df_neg = df.loc[df["win"] == 0, :]
+        df_pos = df.loc[df["win"] == 1, :]
+
         overall = {
-            "strategy": Path(self.model_dir).name,
+            "entry_type": self.entry_type,
+            "entry_struct": self.entry_struct,
+            "exit_struct": self.exit_struct,
+            "stop_method": self.stop_method,
+            "hf_model": self.hf_model,
+            "coint_corr_fn": self.coint_corr_fn,
+            "period": self.period,
             "total_num_stock_tickers": total_num_tickers,
             "num_tickers_with_no_trades": num_tickers_with_no_trades,
             "stock_ticker_without_trades": ", ".join(no_trades),
@@ -211,19 +229,24 @@ class CalProfitLoss:
             "total_num_trades": total_trades,
             "total_num_wins": total_wins,
             "total_num_loss": total_loss,
-            "total_profit": total_profit,
-            "max_loss": df["profit_loss"].min(),
-            "max_profit": df["profit_loss"].max(),
-            "mean_profit": df["profit_loss"].mean(),
-            "median_profit": df["profit_loss"].median(),
+            "min_percent_return": df["percent_ret"].min(),
+            "max_percent_return": df["percent_ret"].max(),
+            "mean_percent_return": df["percent_ret"].mean(),
+            "median_percent_return": df["percent_ret"].median(),
+            "min_pos_percent_return": df_pos["percent_ret"].min(),
+            "lowest_neg_percent_return": df_neg["percent_ret"].max(),
+            "highest_neg_percent_return": df_neg["percent_ret"].min(),
+            "mean_neg_percent_return": df_neg["percent_ret"].mean(),
+            "median_neg_percent_return": df_neg["percent_ret"].median(),
             "first_trade": first_entry_date,
-            "last_trade": df["entry_date"].max(),
+            "last_trade": df["entry_datetime"].max(),
             "min_days_held": df["days_held"].min(),
             "max_days_held": df["days_held"].max(),
             "mean_days_held": df["days_held"].mean(),
             "median_days_held": df["days_held"].median(),
             "trading_period": trading_period,
             "total_investment": total_investment,
+            "total_profit": total_profit,
             "percent_return": percent_ret,
             "annualized_return": annual_ret,
         }
@@ -238,39 +261,43 @@ class CalProfitLoss:
 
         return df_overall
 
-        return df
-
     def gen_breakdown_summary(self) -> pd.DataFrame:
         """Generate breakdown summary for each ticker-cointegrated ticker pair."""
 
-        df = utils.load_csv(f"{self.model_dir}/trade_results.csv")
+        df = utils.load_csv(
+            f"{self.model_dir}/trade_results.csv", tz="America/New_York"
+        )
 
-        # Compute aggregated values for each ticker-coint_ticker pair
-        df_breakdown = df.groupby(by=["ticker", "coint_ticker"]).agg(
+        # Compute aggregated values for each ticker-coint_corr_ticker pair
+        df_breakdown = df.groupby(by=["news_ticker", "ticker"]).agg(
             {
-                "entry_date": ["min", "max"],
-                "exit_date": "max",
+                "entry_datetime": ["min", "max"],
+                "exit_datetime": "max",
                 "days_held": ["min", "max", "mean", "median"],
                 "entry_price": "sum",
-                "profit_loss": ["min", "max", "mean", "median", "sum"],
-                "daily_ret": ["min", "max", "mean", "median"],
+                "profit_loss": ["sum"],
+                "percent_ret": ["min", "max", "mean", "median"],
                 "win": ["count", "sum"],
             }
         )
 
+        # print(f"df_breakdown : \n\n{df_breakdown}\n")
+
         # Flatten multi-level columns and index for ease of processing
-        df.columns = [
+        df_breakdown.columns = [
             "_".join(col_tuple) if col_tuple[1] != "" else col_tuple[0]
-            for col_tuple in df.columns
+            for col_tuple in df_breakdown.columns
         ]
+
+        # print(f"df_breakdown after flattening multi-columns : \n\n{df_breakdown}\n")
 
         # 'mean' and 'median' operation generates float output
         # Round to 6 decimal places and convert to decimal type
         df_breakdown = utils.set_decimal_type(df_breakdown, to_round=True)
 
         # Append 'trading_period' column
-        days_held = pd.to_datetime(df_breakdown["exit_date_max"]) - pd.to_datetime(
-            df_breakdown["entry_date_min"]
+        days_held = pd.to_datetime(df_breakdown["exit_datetime_max"]) - pd.to_datetime(
+            df_breakdown["entry_datetime_min"]
         )
         df_breakdown["trading_period"] = days_held.map(
             lambda delta: Decimal(str(delta.days))
@@ -293,14 +320,14 @@ class CalProfitLoss:
         # Append negative returns statistic
         df_breakdown = self.append_neg_rets(df_breakdown)
 
+        # Reset multi-index if present
+        if df_breakdown.index.names[0] == "news_ticker":
+            df_breakdown = df_breakdown.reset_index()
+
         # Save as csv file
         utils.save_csv(
             df_breakdown, f"{self.model_dir}/breakdown_summary.csv", save_index=False
         )
-
-        # Reset multi-index if present
-        if df_breakdown.index.names[0] == "ticker":
-            df_breakdown = df_breakdown.reset_index()
 
         return df_breakdown
 
@@ -309,24 +336,26 @@ class CalProfitLoss:
         breakdown summary DataFrame."""
 
         # Extract only negative returns from 'trade_results.csv'
-        df = utils.load_csv(f"{self.model_dir}/trade_results.csv")
-        df = df.loc[df["win"] == 0, ["percent_ret"]]
+        df = utils.load_csv(
+            f"{self.model_dir}/trade_results.csv", tz="America/New_York"
+        )
+        df = df.loc[df["win"] == 0, ["news_ticker", "ticker", "percent_ret"]]
 
         # Get min, max, mean and median 'profit_loss'
-        df_neg = df.groupby(by=["ticker", "coint_corr_ticker"]).agg(
+        df_neg = df.groupby(by=["news_ticker", "ticker"]).agg(
             {"percent_ret": ["min", "max", "mean", "median"]}
         )
 
         # Collapse multi-index columns and rename columns
         df_neg.columns = [
-            "neg_ret_min",
             "neg_ret_max",
+            "neg_ret_min",
             "neg_ret_mean",
             "neg_ret_median",
         ]
 
         # Ensure both DataFrame index are the same before performing join
-        if df.index.names == df_breakdown.index.names:
+        if df_neg.index.names == df_breakdown.index.names:
             # Append negative columns to 'df_breakdown'
             df_breakdown = df_breakdown.join(df_neg)
 
@@ -349,7 +378,7 @@ class CalProfitLoss:
         df = df_breakdown.copy()
 
         # Get ticker pair with highest daily return for each unique ticker
-        max_ret_idx = df.groupby(by=["ticker"])["overall_daily_ret"].idxmax()
+        max_ret_idx = df.groupby(by=["news_ticker"])["overall_daily_ret"].idxmax()
         df_highest = (
             df.loc[max_ret_idx, :]
             .sort_values(by=["overall_daily_ret"], ascending=False)

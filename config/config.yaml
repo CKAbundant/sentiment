@@ -2,7 +2,7 @@ date: "2025-04-01"
 download_ohlcv: false
 cal_coint_corr: false
 sentiment: false
-test_all: false
+test_all: true
 plot_graph: false
 
 # Entry, exit and trades generation

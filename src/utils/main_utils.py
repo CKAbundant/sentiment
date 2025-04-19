@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from omegaconf import DictConfig
+from tqdm import tqdm
 
 from config.variables import CointCorrFn, HfModel
 from src.cal_profit_loss import CalProfitLoss
@@ -35,7 +36,7 @@ def gen_signals(date: str, snp500_list: str, cfg: DictConfig) -> None:
         gen_pa = GenPriceAction(
             date=date, snp500_list=snp500_list, **cfg.single, **cfg.std
         )
-        gen_pa.run()
+        _ = gen_pa.run()
 
 
 def run_strategies(
@@ -72,7 +73,7 @@ def run_strategies(
         hf_model,
         coint_corr_fn,
         period,
-    ) in combi_list:
+    ) in tqdm(combi_list):
         # Generate price actions of top 10 cointegrated/correlated stocks
         gen_pa = GenPriceAction(
             date=date,
@@ -86,12 +87,13 @@ def run_strategies(
             period=period,
             **std,
         )
-        gen_pa.run()
+        no_trades_list = gen_pa.run()
 
         # Calculate overall summary, breakdown summary and top ticker pairs
         # with highest daily return for each news ticker
         cal_pl = CalProfitLoss(
             path=std.path,
+            no_trades=no_trades_list,
             date=date,
             entry_type=ent_type,
             entry_struct=ent_struct,
