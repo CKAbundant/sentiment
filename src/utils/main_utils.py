@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 from tqdm import tqdm
 
 from config.variables import CointCorrFn, HfModel
@@ -40,7 +40,7 @@ def gen_signals(date: str, snp500_list: str, cfg: DictConfig) -> None:
 
 
 def run_strategies(
-    date: str, snp500_list: list[str], std: DictConfig, full: DictConfig
+    date: str, snp500_list: list[str], std: DictConfig, full: ListConfig
 ) -> None:
     """Run different combinations of HuggingFace FinBERT sentiment rater,
     cointegration/correlation analysis and time periods for selected 'date'.
@@ -53,8 +53,8 @@ def run_strategies(
         std (DictConfig):
             OmegaConf DictConfig object containing additional standard parameters
             required to initialze 'GenPriceAction' class.
-        full (DictConfig):
-            OmegaConf DictConfig object containing parameters for running all
+        full (ListConfig):
+            OmegaConf ListConfig object containing parameters for running all
             strategies.
 
     Returns:
@@ -74,26 +74,27 @@ def run_strategies(
         coint_corr_fn,
         period,
     ) in tqdm(combi_list):
-        # Generate price actions of top 10 cointegrated/correlated stocks
-        gen_pa = GenPriceAction(
-            date=date,
-            snp500_list=snp500_list,
-            entry_type=ent_type,
-            entry_struct=ent_struct,
-            exit_struct=ex_struct,
-            stop_method=stop_method,
-            hf_model=hf_model,
-            coint_corr_fn=coint_corr_fn,
-            period=period,
-            **std,
-        )
-        no_trades_list = gen_pa.run()
+        # # Generate price actions of top 10 cointegrated/correlated stocks
+        # gen_pa = GenPriceAction(
+        #     date=date,
+        #     snp500_list=snp500_list,
+        #     entry_type=ent_type,
+        #     entry_struct=ent_struct,
+        #     exit_struct=ex_struct,
+        #     stop_method=stop_method,
+        #     hf_model=hf_model,
+        #     coint_corr_fn=coint_corr_fn,
+        #     period=period,
+        #     **std,
+        # )
+        # no_trades_list = gen_pa.run()
 
         # Calculate overall summary, breakdown summary and top ticker pairs
         # with highest daily return for each news ticker
         cal_pl = CalProfitLoss(
             path=std.path,
-            no_trades=no_trades_list,
+            # no_trades=no_trades_list,
+            no_trades=[],
             date=date,
             entry_type=ent_type,
             entry_struct=ent_struct,

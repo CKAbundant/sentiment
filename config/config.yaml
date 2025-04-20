@@ -2,8 +2,8 @@ date: "2025-04-01"
 download_ohlcv: false
 cal_coint_corr: false
 sentiment: false
-test_all: null # true, false, null
-plot_graph: true
+test_all: true # true, false, null
+plot_graph: false
 
 # Entry, exit and trades generation
 entry_signal: "senti_entry"
@@ -70,7 +70,7 @@ senti:
 # Plot Strategies
 plot_strat:
   periods: "${periods}"
-  min_trading_periods: 2
+  min_trading_period: 2
   strategy_subcols:
     - "entry_type"
     - "entry_struct"
@@ -85,6 +85,17 @@ plot_strat:
     - "total_num_trades"
     - "total_investment"
   top_n: 15
+  non_num_indices:
+    - "entry_type"
+    - "entry_struct"
+    - "exit_struct"
+    - "stop_method"
+    - "hf_model"
+    - "coint_corr_fn"
+    - "stock_ticker_without_trades"
+    - "stock_ticker_with_trades"
+    - "first_trade"
+    - "last_trade"
 
 # Path
 path:

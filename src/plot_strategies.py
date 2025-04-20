@@ -15,7 +15,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
+from tqdm import tqdm
 
 from config.variables import CointCorrFn, HfModel
 from src.utils import plot_utils, utils
@@ -48,6 +49,9 @@ class PlotStrategies:
     Args:
         path (DictConfig):
             OmegaConf DictConfig containing required file and directory paths.
+        full (ListConfig):
+            OmegaConf ListConfig object containing parameters for running all
+            strategies.
         date (str):
             If provided, date when news are scraped.
         periods (list[iint]):
@@ -63,8 +67,16 @@ class PlotStrategies:
             (Default: ["annualized_return", "win_rate", "total_num_trades, "total_investment"]).
         top_n (int):
             Top N ticker pair with highest daily return (Default: 15).
+        non_num_indices (list[str]):
+            List of non numeric indicies in 'overall_summary.csv'
+            (Default: ["entry_type", "entry_struct", "exit_struct", "stop_loss",
+            "hf_model", "coint_corr_fn", "stock_ticker_without_trades",
+            "stock_ticker_with_trades", "first_trade", "last_trade"]).
 
     Attributes:
+        full (ListConfig):
+            OmegaConf ListConfig object containing parameters for running all
+            strategies.
         date (str):
             If provided, date when news are scraped.
         periods (list[iint]):
@@ -81,18 +93,23 @@ class PlotStrategies:
             (Default: ["annualized_return", "win_rate", "total_num_trades, "total_investment"]).
         top_n (int):
             Top N ticker pair with highest daily return (Default: 15).
+        non_num_indices (list[str]):
+            List of non numeric indicies in 'overall_summary.csv'
+            (Default: ["entry_type", "entry_struct", "exit_struct", "stop_loss",
+            "hf_model", "coint_corr_fn", "stock_ticker_without_trades",
+            "stock_ticker_with_trades", "first_trade", "last_trade"]).
         date_dir (str):
             Relative path to folder containing all strategies for specific date.
-        coint_corr_date_dir (str):
-            Relative path to folder containing cointegration and correlation
-            info for specific date.
         graph_date_dir (str):
             Relative path to folder to save generated graphs.
+        combined_path (str):
+            Relative path to csv file combining trade results data for all strategies.
     """
 
     def __init__(
         self,
         path: DictConfig,
+        full: ListConfig,
         date: str | None = None,
         periods: list[int] = [1, 3, 5],
         min_trading_period: int = 2,
@@ -112,18 +129,32 @@ class PlotStrategies:
             "total_investment",
         ],
         top_n: int = 15,
+        non_num_indices: list[str] = [
+            "entry_type",
+            "entry_struct",
+            "exit_struct",
+            "stop_loss",
+            "hf_model",
+            "coint_corr_fn",
+            "stock_ticker_without_trades",
+            "stock_ticker_with_trades",
+            "first_trade",
+            "last_trade",
+        ],
     ) -> None:
+        self.full = full
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.periods = periods
         self.min_trading_period = min_trading_period
         self.strategy_subcols = strategy_subcols
         self.analysis_cols = analysis_cols
         self.top_n = top_n
+        self.non_num_indices = non_num_indices
 
         # Get directory paths
         self.date_dir = f"{path.data_dir}/{self.date}"
-        self.coint_corr_date_dir = f"{path.coint_corr_dir}/{self.date}"
         self.graph_date_dir = f"{path.graph_dir}/{self.date}"
+        self.combined_path = f"{self.date_dir}/combined_overall.csv"
 
     def run(self) -> None:
         # Combine 'overall_summary.csv' info for all combinations
@@ -376,23 +407,29 @@ class PlotStrategies:
         """Combine DataFrame generated from 'overall_summary.csv' for all
         combinations."""
 
-        combined_path = Path(f"{self.date_dir}/combined_overall.csv")
+        combined_path = Path(self.combined_path)
 
+        # Load csv file if exist
         if combined_path.is_file():
             print(f"{combined_path.name} exists at '{combined_path.as_posix()}'")
-            return utils.load_csv(combined_path)
+            return utils.load_csv(combined_path, tz="America/New_York")
 
-        # Get FinBERT models, cointegration/correlation functions and time periods
-        hf_models = get_args(HfModel)
-        coint_corr_fns = get_args(CointCorrFn)
-
+        # Get list of combinations for long, short and long-short strategies
+        combi_list = [list(product(*strat)) for strat in self.full]
+        combi_list = [combi for sub_list in combi_list for combi in sub_list]
         df_list = []
 
-        for hf_model, coint_corr_fn, period in product(
-            hf_models, coint_corr_fns, self.periods
-        ):
-            strategy_dir = f"{self.date_dir}/{hf_model}_{coint_corr_fn}_{period}"
-            overall_path = f"{strategy_dir}/overall_summary.csv"
+        for (
+            ent_type,
+            ent_struct,
+            ex_struct,
+            stop_method,
+            hf_model,
+            coint_corr_fn,
+            period,
+        ) in tqdm(combi_list):
+            model_dir = f"./data/2025-04-01/{ent_type}_{ent_struct}_{ex_struct}_{stop_method}/{hf_model}_{coint_corr_fn}_{period}"
+            overall_path = f"{model_dir}/overall_summary.csv"
 
             # Append formatted overall summary DataFrame to list
             df_list.append(self.format_overall_df(overall_path))
@@ -421,6 +458,8 @@ class PlotStrategies:
                 Pivoted DataFrame where columns are top N tickers.
         """
 
+        top_n = top_n or self.top_n
+
         top_n_path = Path(f"{self.date_dir}/top_{top_n}_tickers.csv")
         pivot_top_n_path = Path(f"{self.date_dir}/pivot_top_{top_n}_tickers.csv")
 
@@ -428,26 +467,32 @@ class PlotStrategies:
             print(f"{top_n_path.name} exists at '{top_n_path.as_posix()}'")
             print(f"{pivot_top_n_path.name} exists at '{pivot_top_n_path.as_posix()}'")
 
-            return utils.load_csv(top_n_path), utils.load_csv(
+            return utils.load_csv(top_n_path, tz="America/New_York"), utils.load_csv(
                 pivot_top_n_path, index_col=[0]
             )
 
-        top_n = top_n or self.top_n
-
-        # Get FinBERT models, cointegration/correlation functions and time periods
-        hf_models = get_args(HfModel)
-        coint_corr_fns = get_args(CointCorrFn)
-
+        # Get list of combinations for long, short and long-short strategies
+        combi_list = [list(product(*strat)) for strat in self.full]
+        combi_list = [combi for sub_list in combi_list for combi in sub_list]
         df_list, df_pivot_list = [], []
 
-        for hf_model, coint_corr_fn, period in product(
-            hf_models, coint_corr_fns, self.periods
-        ):
-            strategy_dir = f"{self.date_dir}/{hf_model}_{coint_corr_fn}_{period}"
-            breakdown_path = f"{strategy_dir}/breakdown_summary.csv"
+        for strat_comp_list in tqdm(combi_list):
+            (
+                ent_type,
+                ent_struct,
+                ex_struct,
+                stop_method,
+                hf_model,
+                coint_corr_fn,
+                period,
+            ) = strat_comp_list
+            model_dir = f"./data/2025-04-01/{ent_type}_{ent_struct}_{ex_struct}_{stop_method}/{hf_model}_{coint_corr_fn}_{period}"
+            breakdown_path = f"{model_dir}/breakdown_summary.csv"
 
             # Extract top N ticker pairs with highest daily return
-            df, df_pivot = self.format_breakdown_df(breakdown_path, top_n)
+            df, df_pivot = self.format_breakdown_df(
+                breakdown_path, strat_comp_list, top_n
+            )
 
             if df.empty or df_pivot.empty:
                 continue
@@ -469,7 +514,7 @@ class PlotStrategies:
         return df_top_n, df_pivot_top_n
 
     def format_breakdown_df(
-        self, breakdown_path: str, top_n: int | None = None
+        self, breakdown_path: str, strat_comp_list: list[str], top_n: int | None = None
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Format DataFrame loaded from 'breakdown_summary.csv' to extract top N
         ticker pairs with highest daily return.
@@ -478,6 +523,10 @@ class PlotStrategies:
             breakdown_path (str):
                 Relative path to 'breakdown_summary.csv' for specific model
                 at specific date.
+            strat_comp_list (list[str]):
+                List of components making up the strategy i.e. entry type, entry
+                structure, exit structure, stop method, hf model, cointegration/correlation
+                function and period.
             top_n (int | None):
                 If provided, top N number of ticker pairs with highest daily return.
 
@@ -492,7 +541,7 @@ class PlotStrategies:
         top_n = top_n or self.top_n
 
         # Load DataFrame from 'breakdown_summary.csv'
-        df_breakdown = utils.load_csv(breakdown_path, header=[0, 1], index_col=[0, 1])
+        df_breakdown = utils.load_csv(breakdown_path, tz="America/New_York")
 
         # Filter only trading periods more than 'self.min_trading_period' days;
         # sort 'overall_daily_ret' by descending order
@@ -502,12 +551,12 @@ class PlotStrategies:
         ]
         df = df.sort_values(by="overall_daily_ret", ascending=False).reset_index()
 
-        # Insert 'strategy' (<hf_model>_<coint_corr_fn>_<period>) column
-        strategy_name = Path(breakdown_path).parent.name
-        df.insert(0, "strategy", strategy_name)
-
         # Insert 'ticker_pair' (<ticker>_<coint_corr_ticker>)
-        df.insert(1, "ticker_pair", df["ticker"] + "_" + df["coint_ticker"])
+        df.insert(0, "ticker_pair", df["ticker"] + "_" + df["coint_ticker"])
+
+        # Insert 'entry_type', 'entry_struct', 'exit_struct', 'stop_method',
+        # 'hf_model', 'coint_corr_fn' and 'period' columns
+        df = self.insert_strat_cols(df, strat_comp_list)
 
         # Get top N ticker pairs
         df = df.head(top_n).reset_index(drop=True)
@@ -519,6 +568,39 @@ class PlotStrategies:
         df_pivot.columns = [f"top_{idx+1}" for idx in range(top_n)]
 
         return df, df_pivot
+
+    def insert_strat_cols(
+        self, df_breakdown: pd.DataFrame, strat_comp_list: list[str]
+    ) -> pd.DataFrame:
+        """Insert 'entry_type', 'entry_struct', 'exit_struct', 'stop_method',
+        'hf_model', 'coint_corr_fn' and 'period' columns.
+
+        Args:
+            df_breakdown (pd.DataFrame):
+                DataFrame loaded from breakdown summary for specific model and date.
+            strat_comp_list (list[str]):
+                List of components making up the strategy i.e. entry type, entry
+                structure, exit structure, stop method, hf model, cointegration/correlation
+                function and period.
+
+        Returns:
+            (pd.DataFrame): DataFrame with appended strategy components.
+        """
+
+        # Create DataFrame from 'strat_comp_list'
+        df_comp = pd.DataFrame(
+            strat_comp_list,
+            columns=[
+                "entry_type",
+                "entry_struct",
+                "exit_struct",
+                "stop_method",
+                "hf_model",
+                "coint_corr_fn",
+                "period",
+            ],
+        )
+        df
 
     def format_overall_df(self, overall_path: str) -> pd.DataFrame:
         """Format DataFrame loaded from 'overall_summary.csv' such that indexes are
@@ -534,43 +616,7 @@ class PlotStrategies:
         df_overall = df_overall.T.reset_index()
         df_overall = df_overall.drop(columns=["index"])
 
-        # Insert 'strategy' column if not present
-        if "strategy" not in df_overall.columns:
-            df_overall.insert(0, "strategy", Path(overall_path).parent.name)
-
-        # Ensure 'total_num_wins' and 'total_num_trades' are of integer type.
-        # Append 'win_rate' column
-        df_overall["win_rate"] = (
-            df_overall["total_num_wins"] / df_overall["total_num_trades"]
-        )
-        df_overall["win_rate"] = df_overall["win_rate"].map(
-            lambda val: val.quantize(Decimal("1.000000"))
-        )
-
-        # Split 'strategy' columns into its component i.e. 'hf_model',
-        # 'coint_corr_fn' and 'period'
-        df_overall = self.reorder_cols(df_overall)
-
         return df_overall
-
-    def reorder_cols(self, df_overall: pd.DataFrame) -> pd.DataFrame:
-        """Split 'strategy' columns into its component i.e. 'hf_model',
-        'coint_corr_fn' and 'period'."""
-
-        df = df_overall.copy()
-
-        # Split 'strategy' column into 'hf_model', 'coint_corr_fn' and period
-        df[self.strategy_subcols] = df["strategy"].str.rsplit("_", n=2, expand=True)
-        df["period"] = df["period"].map(Decimal)
-
-        no_strategy_cols = [
-            col
-            for col in df_overall.columns
-            if col not in self.strategy_subcols + ["strategy"]
-        ]
-        new_cols = ["strategy"] + self.strategy_subcols + no_strategy_cols
-
-        return df.loc[:, new_cols]
 
     def convert_to_valid_type(self, df_overall: pd.DataFrame) -> pd.DataFrame:
         """Ensure numeric data is set to Decimal type and rest to string.
@@ -580,17 +626,9 @@ class PlotStrategies:
 
         df = df_overall.copy()
 
-        non_num_indices = [
-            "strategy",
-            "stock_ticker_without_trades",
-            "stock_ticker_with_trades",
-            "first_trade",
-            "last_trade",
-        ]
-
         # Convert valid strings to Decimal type
         for idx in df.index:
-            if idx not in non_num_indices:
+            if idx not in self.non_num_indices:
                 df.at[idx, "Overall Statistics"] = Decimal(
                     df.at[idx, "Overall Statistics"]
                 )
@@ -623,11 +661,6 @@ class PlotStrategies:
             )
 
         df = utils.load_csv(top_tickers_path)
-
-        # Append "hf_model", "coint_corr_fn", "period" columns
-        df[["hf_model", "coint_corr_fn", "period"]] = df["strategy"].str.rsplit(
-            "_", n=2, expand=True
-        )
 
         if strat_comp == "all":
             df = df.loc[:, ["ticker_pair", "overall_daily_ret", "trading_period"]]

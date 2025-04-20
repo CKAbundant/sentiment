@@ -12,10 +12,8 @@ if repo_dir not in sys.path:
     sys.path.append(repo_dir)
 
 from src.cal_coint_corr import CalCointCorr
-from src.cal_profit_loss import CalProfitLoss
 from src.download_ohlcv import DownloadOHLCV
 from src.gen_data import GenData
-from src.gen_price_action import GenPriceAction
 from src.plot_coint_corr import PlotCointCorr
 from src.plot_news import PlotNews
 from src.plot_strategies import PlotStrategies

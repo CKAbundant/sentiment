@@ -200,6 +200,7 @@ class CalProfitLoss:
         first_entry_date = df["entry_datetime"].min()
         last_exit_date = df["exit_datetime"].max()
         trading_period = Decimal((last_exit_date - first_entry_date).days)
+        win_rate = Decimal(str(total_wins / total_trades)).quantize(Decimal("1.000000"))
 
         # Profit/loss info
         total_profit = df["profit_loss"].sum()
@@ -229,6 +230,7 @@ class CalProfitLoss:
             "total_num_trades": total_trades,
             "total_num_wins": total_wins,
             "total_num_loss": total_loss,
+            "win_rate": win_rate,
             "min_percent_return": df["percent_ret"].min(),
             "max_percent_return": df["percent_ret"].max(),
             "mean_percent_return": df["percent_ret"].mean(),
