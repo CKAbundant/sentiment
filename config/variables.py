@@ -2,10 +2,6 @@
 
 from typing import Literal, get_args
 
-# Download OHLCV
-URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-IGNORE_LIST = ["BRK.B", "BF.B", "CTAS", "LEN"]
-
 # Analysis
 HfModel = Literal["prosusai", "yiyanghkust", "ziweichen", "aventiq_ai"]
 CorrFn = Literal["pearsonr", "spearmanr", "kendalltau"]

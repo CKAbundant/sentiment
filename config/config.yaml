@@ -2,14 +2,89 @@ date: "2025-04-01"
 download_ohlcv: false
 cal_coint_corr: false
 sentiment: false
-test_all: true
-plot_graph: false
+test_all: null # true, false, null
+plot_graph: true
 
 # Entry, exit and trades generation
 entry_signal: "senti_entry"
 exit_signal: "senti_exit"
 trades_method: "senti_trades"
+periods:
+  - 1
+  - 3
+  - 5
 
+# Download S&P500 tickers
+snp500_url: "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+ignore_list:
+  - "BRK.B"
+  - "BF.B"
+  - "CTAS"
+  - "LEN"
+
+# Download OHLCV
+ohlcv:
+  start_date: "2020-01-01"
+  batch_size: 20
+  stock_dir: "${path.stock_dir}"
+
+# Compute Cointegration/Correlation
+coint_corr:
+  periods: "${periods}"
+  corr_fn_list:
+    - "pearsonr"
+    - "spearmanr"
+    - "kendalltau"
+
+# Perform sentiment rating
+senti:
+  base_url: "https://finance.yahoo.com/quote/ticker/news)"
+  stock_list:
+    - "AAPL"
+    - "NVDA"
+    - "MSFT"
+    - "AMZN"
+    - "GOOGL"
+    - "META"
+    - "TSLA"
+    - "JPM"
+    - "JNJ"
+    - "V"
+    - "XOM"
+    - "UNH"
+    - "WMT"
+    - "PG"
+    - "HD"
+    - "NFLX"
+    - "CRM"
+    - "BAC"
+    - "BA"
+  max_scrolls: 20
+  model_list:
+    - "ProsusAI/finbert"
+    - "yiyanghkust/finbert-tone"
+    - "ZiweiChen/FinBERT-FOMC"
+    - "AventIQ-AI/finbert-sentiment-analysis"
+  data_dir: "${path.data_dir}"
+
+# Plot Strategies
+plot_strat:
+  periods: "${periods}"
+  min_trading_periods: 2
+  strategy_subcols:
+    - "entry_type"
+    - "entry_struct"
+    - "exit_struct"
+    - "stop_loss"
+    - "hf_model"
+    - "coint_corr_fn"
+    - "period"
+  analysis_cols:
+    - "annualized_return"
+    - "win_rate"
+    - "total_num_trades"
+    - "total_investment"
+  top_n: 15
 
 # Path
 path:
@@ -17,6 +92,7 @@ path:
   data_dir: "./data"
   stock_dir: "${path.data_dir}/stock"
   coint_corr_dir: "${path.data_dir}/coint_corr"
+  graph_dir: "${path.data_dir}/graph"
   strategy_dir: "src/strategy"
 
   # file path

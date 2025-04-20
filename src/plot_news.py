@@ -15,9 +15,17 @@ from typing import get_args
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from omegaconf import DictConfig
 
 from config.variables import Component
 from src.utils import plot_utils, utils
+
+# Set default fontsize for labels and ticks
+plt.rcParams["font.size"] = 12
+plt.rcParams["axes.titlesize"] = 18
+plt.rcParams["axes.labelsize"] = 16
+plt.rcParams["xtick.labelsize"] = 14
+plt.rcParams["ytick.labelsize"] = 14
 
 
 class PlotNews:
@@ -28,12 +36,10 @@ class PlotNews:
         >>> plot_news.run() # Graphs are saved in models subfolder e.g. 'ziweichen_coint_3'
 
     Args:
+        path (DictConfig):
+            OmegaConf DictConfig containing required file and directory paths.
         date (str):
             If provided, date when news are scraped.
-        results_dir (str):
-            Relative path of folder containing news (Default: "./data/results).
-        graph_dir (str):
-            Relative path of folder containing graphs (Default: "./data/graph").
 
     Attributes:
         date (str):
@@ -48,13 +54,12 @@ class PlotNews:
 
     def __init__(
         self,
+        path: DictConfig,
         date: str | None = None,
-        results_dir: str = "./data/results",
-        graph_dir: str = "./data/graph",
     ) -> None:
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
-        self.news_path = f"{results_dir}/{self.date}/news.csv"
-        self.graph_date_dir = f"{graph_dir}/{self.date}"
+        self.news_path = f"{path.data_dir}/{self.date}/news.csv"
+        self.graph_date_dir = f"{path.graph_dir}/{self.date}"
         self.pickle_path = f"{self.graph_date_dir}/counters.pkl"
 
     def run(self) -> None:
@@ -295,17 +300,14 @@ class PlotNews:
                 fig, ax = plt.subplots(figsize=(20, 4))
                 sns.barplot(x=df_count.index, y=df_count["count"], ax=ax)
 
-                ax.set_title(
-                    f"Top {top_n} '{component}' for News {news_type.title()}",
-                    fontsize=18,
-                )
-                ax.set_xlabel(component, fontsize=14)
-                ax.set_ylabel("Counts", fontsize=14)
-                ax.tick_params(axis="x", labelsize=14)
-                ax.tick_params(axis="y", labelsize=14)
+                ax.set_title(f"Top {top_n} '{component}' for News {news_type.title()}")
+                ax.set_xlabel(component)
+                ax.set_ylabel("Counts")
+                ax.tick_params(axis="x")
+                ax.tick_params(axis="y")
 
                 if component == "word":
-                    ax.tick_params(axis="x", labelrotation=30, labelsize=12)
+                    ax.tick_params(axis="x", labelrotation=30)
 
                 plt.tight_layout()
                 plt.savefig(

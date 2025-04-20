@@ -7,10 +7,18 @@ from typing import get_args
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from omegaconf import DictConfig
 from tqdm import tqdm
 
 from config.variables import CointCorrFn
 from src.utils import utils
+
+# Set default fontsize for labels and ticks
+plt.rcParams["font.size"] = 12
+plt.rcParams["axes.titlesize"] = 18
+plt.rcParams["axes.labelsize"] = 16
+plt.rcParams["xtick.labelsize"] = 14
+plt.rcParams["ytick.labelsize"] = 14
 
 
 class PlotCointCorr:
@@ -21,20 +29,13 @@ class PlotCointCorr:
         >>> plot_coint_corr.run()
 
     Args:
+        path (DictConfig):
+            OmegaConf DictConfig containing required file and directory paths.
         date (str):
             If provided, date when news are scraped.
         periods (list[iint]):
             Number of past years records for cointegration/correlation computation
             (Default: [1, 2, 3]).
-        results_dir (str):
-            Relative path of folder containing news for all dates
-            (Default: "./data/results).
-        coint_corr_dir (str):
-            Relative path of folder containing cointegration and correlation info
-            for all dates (Default: "./data/coint_corr").
-        graph_dir (str):
-            Relative path of folder containing graphs for all dates
-            (Default: "./data/graph").
 
     Attributes:
         date (str):
@@ -53,17 +54,15 @@ class PlotCointCorr:
 
     def __init__(
         self,
+        path: DictConfig,
         date: str | None = None,
         periods: list[int] = [1, 3, 5],
-        results_dir: str = "./data/results/",
-        coint_corr_dir: str = "./data/coint_corr",
-        graph_dir: str = "./data/graph",
     ) -> None:
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.periods = periods
-        self.news_path = f"{results_dir}/{self.date}/news.csv"
-        self.coint_corr_date_dir = f"{coint_corr_dir}/{self.date}"
-        self.graph_date_dir = f"{graph_dir}/{self.date}"
+        self.news_path = f"{path.data_dir}/{self.date}/news.csv"
+        self.coint_corr_date_dir = f"{path.coint_corr_dir}/{self.date}"
+        self.graph_date_dir = f"{path.graph_dir}/{self.date}"
 
     def run(self) -> None:
         """Generate histogram plot for Engle-Granger (coint), Pearson, Spearman,

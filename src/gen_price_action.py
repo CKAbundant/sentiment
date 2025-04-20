@@ -469,7 +469,7 @@ class GenPriceAction:
 
         if df.empty:
             print(
-                f"Records doesn't meet minimum requirement for '{self.coint_corr_fn}' method."
+                f"Records doesn't meet minimum requirement for '{self.coint_corr_fn}' method [ticker: {ticker}, period: {self.period} years]."
             )
             return None
 

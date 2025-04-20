@@ -15,9 +15,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from omegaconf import DictConfig
 
 from config.variables import CointCorrFn, HfModel
 from src.utils import plot_utils, utils
+
+# Set default fontsize for labels and ticks
+plt.rcParams["font.size"] = 12
+plt.rcParams["axes.titlesize"] = 18
+plt.rcParams["axes.labelsize"] = 16
+plt.rcParams["xtick.labelsize"] = 14
+plt.rcParams["ytick.labelsize"] = 14
+
+# Set color palette
+palette = sns.color_palette("colorblind", 5)
+sns.set_palette(palette)
 
 
 class PlotStrategies:
@@ -34,6 +46,8 @@ class PlotStrategies:
         >>> plot_strategies.run()
 
     Args:
+        path (DictConfig):
+            OmegaConf DictConfig containing required file and directory paths.
         date (str):
             If provided, date when news are scraped.
         periods (list[iint]):
@@ -49,15 +63,6 @@ class PlotStrategies:
             (Default: ["annualized_return", "win_rate", "total_num_trades, "total_investment"]).
         top_n (int):
             Top N ticker pair with highest daily return (Default: 15).
-        results_dir (str):
-            Relative path of folder containing news for all dates
-            (Default: "./data/results).
-        coint_corr_dir (str):
-            Relative path of folder containing cointegration and correlation info
-            for all dates (Default: "./data/coint_corr").
-        graph_dir (str):
-            Relative path of folder containing graphs for all dates
-            (Default: "./data/graph").
 
     Attributes:
         date (str):
@@ -69,15 +74,15 @@ class PlotStrategies:
             Minimum trading period to be considered for top N computation (Default: 2).
         strategy_subcols (list[str])
             List of column names representing components of strategy
-            (Default: ["hf_model", "coint_corr_fn", "period"].
+            (Default: ["entry_type", "entry_struct", "exit_struct", "stop_loss",
+            "hf_model", "coint_corr_fn", "period"].
         analysis_cols (list[str]):
             List of columns required for analysis
             (Default: ["annualized_return", "win_rate", "total_num_trades, "total_investment"]).
         top_n (int):
             Top N ticker pair with highest daily return (Default: 15).
-        results_date_dir (str):
-            Relative path to folder containing all strategies for specific date
-            (Default: "./data/results").
+        date_dir (str):
+            Relative path to folder containing all strategies for specific date.
         coint_corr_date_dir (str):
             Relative path to folder containing cointegration and correlation
             info for specific date.
@@ -87,10 +92,19 @@ class PlotStrategies:
 
     def __init__(
         self,
+        path: DictConfig,
         date: str | None = None,
         periods: list[int] = [1, 3, 5],
         min_trading_period: int = 2,
-        strategy_subcols: list[str] = ["hf_model", "coint_corr_fn", "period"],
+        strategy_subcols: list[str] = [
+            "entry_type",
+            "entry_struct",
+            "exit_struct",
+            "stop_loss",
+            "hf_model",
+            "coint_corr_fn",
+            "period",
+        ],
         analysis_cols: list[str] = [
             "annualized_return",
             "win_rate",
@@ -98,9 +112,6 @@ class PlotStrategies:
             "total_investment",
         ],
         top_n: int = 15,
-        results_dir: str = "./data/results/",
-        coint_corr_dir: str = "./data/coint_corr",
-        graph_dir: str = "./data/graph",
     ) -> None:
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.periods = periods
@@ -108,24 +119,26 @@ class PlotStrategies:
         self.strategy_subcols = strategy_subcols
         self.analysis_cols = analysis_cols
         self.top_n = top_n
-        self.results_date_dir = f"{results_dir}/{self.date}"
-        self.coint_corr_date_dir = f"{coint_corr_dir}/{self.date}"
-        self.graph_date_dir = f"{graph_dir}/{self.date}"
+
+        # Get directory paths
+        self.date_dir = f"{path.data_dir}/{self.date}"
+        self.coint_corr_date_dir = f"{path.coint_corr_dir}/{self.date}"
+        self.graph_date_dir = f"{path.graph_dir}/{self.date}"
 
     def run(self) -> None:
-        # # Combine 'overall_summary.csv' info for all combinations
-        # df_combined = self.combine_overall()
+        # Combine 'overall_summary.csv' info for all combinations
+        df_combined = self.combine_overall()
 
-        # # Generate DataFrame containing top 15 ticker pairs with highest
-        # # positive annualized return
-        # df_top_n, df_pivot_top_n = self.gen_top_n_pairs()
+        # Generate DataFrame containing top 15 ticker pairs with highest
+        # positive annualized return
+        df_top_n, df_pivot_top_n = self.gen_top_n_pairs()
 
-        # # Plot histograms of annualized returns for all combinations, all FinBERT,
-        # # all cointegration/correlation and all time period
-        # self.plot_all(df_combined)
-        # self.plot_drill_down(df_combined, "hf_model")
-        # self.plot_drill_down(df_combined, "coint_corr_fn")
-        # self.plot_drill_down(df_combined, "period")
+        # Plot histograms of annualized returns for all combinations, all FinBERT,
+        # all cointegration/correlation and all time period
+        self.plot_all(df_combined)
+        self.plot_drill_down(df_combined, "hf_model")
+        self.plot_drill_down(df_combined, "coint_corr_fn")
+        self.plot_drill_down(df_combined, "period")
 
         # Plot top N tickers with highest daily return overall and for different
         # strategy component
@@ -134,14 +147,14 @@ class PlotStrategies:
         for strat_comp in self.strategy_subcols:
             self.plot_top_strat_comp(strat_comp)
 
-        # # Plot bar chart of common occurring ticker pairs among top_N pairs
-        # self.plot_common(df_top_n)
+        # Plot bar chart of common occurring ticker pairs among top_N pairs
+        self.plot_common(df_top_n)
 
-        # # Plot bar chart of common occuring ticker pairs in increasing top N
-        # # i.e. start from top 1 till top N
-        # self.plot_successive_common(df_pivot_top_n)
+        # Plot bar chart of common occuring ticker pairs in increasing top N
+        # i.e. start from top 1 till top N
+        self.plot_successive_common(df_pivot_top_n)
 
-        # return df_combined, df_top_n, df_pivot_top_n
+        return df_combined, df_top_n, df_pivot_top_n
 
     def plot_all(self, df_combined: pd.DataFrame) -> None:
         """Plot histogram of annualized returns, mean days held, trading period,
@@ -223,9 +236,9 @@ class PlotStrategies:
         sns.barplot(x=df["ticker_pair"], y=df["overall_daily_ret"], ax=ax)
 
         ax.set_title(f"Top {top_n} Ticker Pairs with Highest Daily Return", fontsize=24)
-        ax.set_xlabel("Ticker Pair", fontsize=14)
-        ax.set_ylabel("Daily Returns", fontsize=14)
-        ax.tick_params(axis="x", rotation=30, labelsize=14)
+        ax.set_xlabel("Ticker Pair")
+        ax.set_ylabel("Daily Returns")
+        ax.tick_params(axis="x", rotation=30)
 
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
@@ -244,10 +257,10 @@ class PlotStrategies:
         for ax, (comp, df) in zip(axes.flat, df_dict.items()):
             sns.barplot(x=df["ticker_pair"], y=df["overall_daily_ret"], ax=ax)
 
-            ax.set_title(f"Top {top_n} Ticker Pairs for '{comp}'", fontsize=18)
-            ax.set_xlabel("Ticker Pair", fontsize=14)
-            ax.set_ylabel("Daily Returns", fontsize=14)
-            ax.tick_params(axis="x", rotation=30, labelsize=14)
+            ax.set_title(f"Top {top_n} Ticker Pairs for '{comp}'")
+            ax.set_xlabel("Ticker Pair")
+            ax.set_ylabel("Daily Returns")
+            ax.tick_params(axis="x", rotation=30)
 
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
@@ -275,11 +288,11 @@ class PlotStrategies:
         # Plot bar chart of top N ticker_pair
         sns.barplot(x=top_n_pairs.index, y=top_n_pairs, ax=ax)
 
-        ax.set_title(f"Top {top_n} Ticker Pair by Frequency", fontsize=18)
-        ax.set_xlabel("Ticker Pair", fontsize=14)
-        ax.set_ylabel("Counts", fontsize=14)
-        ax.tick_params(axis="x", labelsize=14)
-        ax.tick_params(axis="y", labelsize=14)
+        ax.set_title(f"Top {top_n} Ticker Pair by Frequency")
+        ax.set_xlabel("Ticker Pair")
+        ax.set_ylabel("Counts")
+        ax.tick_params(axis="x")
+        ax.tick_params(axis="y")
 
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
@@ -309,11 +322,10 @@ class PlotStrategies:
             ax.set_title(
                 f"Top {display_num} Common Ticker-Pairs Extracted from Top {idx+1} "
                 "Ticker-Pairs",
-                fontsize=14,
             )
-            ax.set_xlabel("Ticker-Pair", fontsize=14)
-            ax.set_ylabel("Counts", fontsize=14)
-            ax.tick_params(axis="x", rotation=30, labelsize=14)
+            ax.set_xlabel("Ticker-Pair")
+            ax.set_ylabel("Counts")
+            ax.tick_params(axis="x", rotation=30)
 
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
@@ -364,7 +376,7 @@ class PlotStrategies:
         """Combine DataFrame generated from 'overall_summary.csv' for all
         combinations."""
 
-        combined_path = Path(f"{self.results_date_dir}/combined_overall.csv")
+        combined_path = Path(f"{self.date_dir}/combined_overall.csv")
 
         if combined_path.is_file():
             print(f"{combined_path.name} exists at '{combined_path.as_posix()}'")
@@ -379,9 +391,7 @@ class PlotStrategies:
         for hf_model, coint_corr_fn, period in product(
             hf_models, coint_corr_fns, self.periods
         ):
-            strategy_dir = (
-                f"{self.results_date_dir}/{hf_model}_{coint_corr_fn}_{period}"
-            )
+            strategy_dir = f"{self.date_dir}/{hf_model}_{coint_corr_fn}_{period}"
             overall_path = f"{strategy_dir}/overall_summary.csv"
 
             # Append formatted overall summary DataFrame to list
@@ -411,10 +421,8 @@ class PlotStrategies:
                 Pivoted DataFrame where columns are top N tickers.
         """
 
-        top_n_path = Path(f"{self.results_date_dir}/top_{top_n}_tickers.csv")
-        pivot_top_n_path = Path(
-            f"{self.results_date_dir}/pivot_top_{top_n}_tickers.csv"
-        )
+        top_n_path = Path(f"{self.date_dir}/top_{top_n}_tickers.csv")
+        pivot_top_n_path = Path(f"{self.date_dir}/pivot_top_{top_n}_tickers.csv")
 
         if top_n_path.is_file() and pivot_top_n_path.is_file():
             print(f"{top_n_path.name} exists at '{top_n_path.as_posix()}'")
@@ -435,9 +443,7 @@ class PlotStrategies:
         for hf_model, coint_corr_fn, period in product(
             hf_models, coint_corr_fns, self.periods
         ):
-            strategy_dir = (
-                f"{self.results_date_dir}/{hf_model}_{coint_corr_fn}_{period}"
-            )
+            strategy_dir = f"{self.date_dir}/{hf_model}_{coint_corr_fn}_{period}"
             breakdown_path = f"{strategy_dir}/breakdown_summary.csv"
 
             # Extract top N ticker pairs with highest daily return
@@ -450,13 +456,13 @@ class PlotStrategies:
 
         # Concantate row-wise' and reset index
         df_top_n = pd.concat(df_list, axis=0).reset_index(drop=True)
-        utils.save_csv(df_top_n, f"{self.results_date_dir}/top_{top_n}_tickers.csv")
+        utils.save_csv(df_top_n, f"{self.date_dir}/top_{top_n}_tickers.csv")
 
         # Generate pivot table where columns are top N tickers
         df_pivot_top_n = pd.concat(df_pivot_list, axis=0)
         utils.save_csv(
             df_pivot_top_n,
-            f"{self.results_date_dir}/pivot_top_{top_n}_tickers.csv",
+            f"{self.date_dir}/pivot_top_{top_n}_tickers.csv",
             save_index=True,
         )
 
@@ -609,7 +615,7 @@ class PlotStrategies:
                 Dictionary mapping strategy component to top N ticker pairs.
         """
 
-        top_tickers_path = Path(f"{self.results_date_dir}/top_{top_n}_tickers.csv")
+        top_tickers_path = Path(f"{self.date_dir}/top_{top_n}_tickers.csv")
 
         if not top_tickers_path.is_file():
             raise FileNotFoundError(

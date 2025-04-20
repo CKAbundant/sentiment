@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import pandas as pd
 from matplotlib.figure import Figure
+from omegaconf import DictConfig
 from scipy import stats
 from statsmodels.tsa.stattools import coint
 from tqdm import tqdm
@@ -29,6 +30,8 @@ class CalCointCorr:
         >>> get_rel.run()
 
     Args:
+        path (DictConfig):
+            OmegaConf DictConfig containing required file and directory paths.
         snp500_list (list[str]):
             List of S&P 500 list.
         date (str):
@@ -36,16 +39,10 @@ class CalCointCorr:
         periods (list[int]):
             list of time periods to compute correlation and cointegration
             (Default: [1, 3, 5]).
-        stock_dir (str):
-            Relative path to folder containing stocks OHLCV data
-            (Default: "./data/stock").
-        coint_corr_dir (str):
-            Relative path to folder containing cointegration and correlation information
-            (Default: "./data/coint_corr").
-        corr_fn_list (tuple[str] | None):
-            If provided, list of correlation functions.
 
     Attributes
+        path (DictConfig):
+            OmegaConf DictConfig containing required file and directory paths.
         snp500_list (list[str]):
             List of S&P 500 list.
         date (str):
@@ -53,34 +50,31 @@ class CalCointCorr:
         periods (list[int]):
             list of time periods to compute correlation and cointegration
             (Default: [1, 3, 5]).
+        corr_fn_list (tuple[str]):
+            List of correlation functions (Default: ("pearsonr", "spearmanr", "kendalltau")).
         stock_dir (str):
             Relative path to folder containing stocks OHLCV data
             (Default: "./data/stock").
-        coint_corr_dir (str):
-            Relative path to folder containing cointegration and correlation information
-            (Default: "./data/coint_corr").
         coint_corr_date_dir (str):
             Relative path to subfolder under 'coint_corr_dir'.
-        corr_fn_list (tuple[str]):
-            List of correlation functions (Default: ("pearsonr", "spearmanr", "kendalltau")).
     """
 
     def __init__(
         self,
+        path: DictConfig,
         snp500_list: list[str],
         date: str | None = None,
         periods: list[int] = [1, 3, 5],
-        stock_dir: str = "./data/stock",
-        coint_corr_dir: str = "./data/coint_corr",
         corr_fn_list: tuple[str] | None = None,
     ) -> None:
         self.snp500_list = snp500_list
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.periods = periods
-        self.stock_dir = stock_dir
-        self.coint_corr_dir = coint_corr_dir
-        self.coint_corr_date_dir = f"{coint_corr_dir}/{self.date}"
         self.corr_fn_list = corr_fn_list or get_args(CorrFn)
+
+        # Get directory paths
+        self.stock_dir = path.stock_dir
+        self.coint_corr_date_dir = f"{path.coint_corr_dir}/{self.date}"
 
     def run(self) -> None:
         """Generate DataFrame containing correlation and cointegration between
