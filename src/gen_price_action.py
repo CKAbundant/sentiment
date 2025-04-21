@@ -222,15 +222,9 @@ class GenPriceAction:
         )
         self.price_action_dir = f"{self.model_dir}/price_actions"
 
-    def run(self) -> list[str]:
+    def run(self) -> None:
         """Generate and save DataFrame including average sentiment rating and
         closing price of stock and co-integrated stock.
-
-        Args:
-            None.
-
-        Returns:
-            no_trades_list (list[str]): List of news ticker without completed trades.
         """
 
         # Load 'sentiment.csv' and 'coint_5y.csv'
@@ -238,7 +232,6 @@ class GenPriceAction:
         df_coint_corr = self.load_coint_corr()
 
         results_list = []
-        no_trades_list = []
 
         for ticker in df_senti["ticker"].unique():
             # Filter specific ticker
@@ -253,9 +246,8 @@ class GenPriceAction:
             df_av.insert(0, "ticker", ticker)
 
             # Append closing price of top N co-integrated stocks with lowest pvalue
-            df_trades, no_trades = self.gen_topn_close(df_av, df_coint_corr, ticker)
+            df_trades = self.gen_topn_close(df_av, df_coint_corr, ticker)
             results_list.append(df_trades)
-            no_trades_list.extend(no_trades)
 
         # Combine list of DataFrame to a single DataFrame
         df_results = pd.concat(results_list, axis=0).reset_index(drop=True)
@@ -267,8 +259,6 @@ class GenPriceAction:
         utils.save_csv(
             df_results, f"{self.model_dir}/trade_results.csv", save_index=False
         )
-
-        return sorted(no_trades_list, reverse=False)
 
     def load_coint_corr(self) -> pd.DataFrame:
         """Load csv file containing cointegration and correlation info."""
@@ -337,7 +327,7 @@ class GenPriceAction:
         df_av: pd.DataFrame,
         df_coint_corr: pd.DataFrame,
         ticker: str,
-    ) -> tuple[pd.DataFrame, list[str]]:
+    ) -> pd.DataFrame:
         """Generate and save Dataframe for each 'top_n' cointegrated stocks with
         lowest pvalue.
 
@@ -354,8 +344,6 @@ class GenPriceAction:
         Returns:
             df_trades (pd.DataFrame):
                 List of DataFrames containing completed trades for specific news ticker.
-            no_trades_list (list[str]):
-                List of news tickers with no completed trades.
         """
 
         df = df_av.copy()
@@ -367,8 +355,6 @@ class GenPriceAction:
         if coint_corr_list is None:
             return pd.DataFrame(), []
 
-        no_trades_list = []
-
         for coint_corr_ticker in coint_corr_list:
             # Generate and save DataFrame for each cointegrated stock
             df_coint_corr_ticker = self.append_coint_corr_ohlc(df, coint_corr_ticker)
@@ -378,24 +364,18 @@ class GenPriceAction:
             df_trades, df_signals = trading_strategy(df_coint_corr_ticker)
             trades_list.append(df_trades)
 
-            # Update no_trades_list for ticker pair
-            file_name = f"{ticker}_{coint_corr_ticker}.csv"
-            no_trades_list.extend(trading_strategy.no_trades)
-
             # Create folder if not exist
             utils.create_folder(self.price_action_dir)
 
             # Save signals DataFrame as csv file
+            file_name = f"{ticker}_{coint_corr_ticker}.csv"
             file_path = f"{self.price_action_dir}/{file_name}"
             utils.save_csv(df_signals, file_path, save_index=False)
 
         # Combine all trades DataFrame
         df_trades = pd.concat(trades_list, axis=0).reset_index(drop=True)
 
-        # Ensure no duplicates in 'no_trades_list
-        no_trades_list = list(set(no_trades_list))
-
-        return df_trades, no_trades_list
+        return df_trades
 
     def gen_strategy(self) -> TradingStrategy:
         """Generate strategy based on 'entry_type', 'entry_struct', 'exit_struct',

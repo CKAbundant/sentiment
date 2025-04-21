@@ -29,7 +29,7 @@ def gen_signals(date: str, snp500_list: str, cfg: DictConfig) -> None:
 
     if cfg.test_all:
         # Test out different strategies
-        run_strategies(date, snp500_list, cfg.std, cfg.full)
+        run_strategies(date, snp500_list, cfg)
 
     else:
         # Test specific strategy
@@ -39,9 +39,7 @@ def gen_signals(date: str, snp500_list: str, cfg: DictConfig) -> None:
         _ = gen_pa.run()
 
 
-def run_strategies(
-    date: str, snp500_list: list[str], std: DictConfig, full: ListConfig
-) -> None:
+def run_strategies(date: str, snp500_list: list[str], cfg: DictConfig) -> None:
     """Run different combinations of HuggingFace FinBERT sentiment rater,
     cointegration/correlation analysis and time periods for selected 'date'.
 
@@ -50,19 +48,15 @@ def run_strategies(
             Date when news is sentiment rated.
         snp500_list (list[str]):
             List of S&P500 stock tickers.
-        std (DictConfig):
-            OmegaConf DictConfig object containing additional standard parameters
-            required to initialze 'GenPriceAction' class.
-        full (ListConfig):
-            OmegaConf ListConfig object containing parameters for running all
-            strategies.
+        cfg (DictConfig):
+            OmegaConf DictConfig containing required parameters.
 
     Returns:
         None.
     """
 
     # Get list of combinations for long, short and long-short strategies
-    combi_list = [list(product(*strat)) for strat in full]
+    combi_list = [list(product(*strat)) for strat in cfg.full]
     combi_list = [combi for sub_list in combi_list for combi in sub_list]
 
     for (
@@ -85,16 +79,15 @@ def run_strategies(
         #     hf_model=hf_model,
         #     coint_corr_fn=coint_corr_fn,
         #     period=period,
-        #     **std,
+        #     **cfg.std,
         # )
-        # no_trades_list = gen_pa.run()
+        # gen_pa.run()
 
         # Calculate overall summary, breakdown summary and top ticker pairs
         # with highest daily return for each news ticker
         cal_pl = CalProfitLoss(
-            path=std.path,
-            # no_trades=no_trades_list,
-            no_trades=[],
+            path=cfg.path,
+            news_ticker_list=cfg.news_ticker_list,
             date=date,
             entry_type=ent_type,
             entry_struct=ent_struct,

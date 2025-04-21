@@ -95,8 +95,6 @@ class SentiTrades(GenTrades):
             If provided, percentage loss allowed for investment.
         stop_method (ExitMethod):
             Exit method to generate stop price.
-        no_trades (list[str]):
-            List containing stock tickers with no completed trades.
         stop_list (list[dict[str, datetime | Decimal]]):
             List to record datetime, stop price and whether stop price is triggered.
         entry_struct_path (str):
@@ -144,7 +142,6 @@ class SentiTrades(GenTrades):
         # Price-related stops
         self.percent_loss = percent_loss
         self.stop_method = stop_method
-        self.no_trades = []
         self.stop_info_list = []
 
     def gen_trades(self, df_senti: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -219,10 +216,6 @@ class SentiTrades(GenTrades):
             # print(f"net_pos after update : {self.get_net_pos()}")
             # print(f"len(self.open_trades) : {len(self.open_trades)}")
             # display_open_trades(self.open_trades)
-
-        # No completed trades recorded
-        if not completed_list:
-            self.no_trades.append(ticker)
 
         # Convert 'stop_info_list' to DataFrame and append to 'df_senti'
         # 'self.stop_list and 'self.trigger_list' are not empty

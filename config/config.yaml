@@ -3,12 +3,34 @@ download_ohlcv: false
 cal_coint_corr: false
 sentiment: false
 test_all: true # true, false, null
-plot_graph: false
+plot_graph: true
 
 # Entry, exit and trades generation
 entry_signal: "senti_entry"
 exit_signal: "senti_exit"
 trades_method: "senti_trades"
+
+# Sentiment analysis
+news_ticker_list:
+  - "AAPL"
+  - "NVDA"
+  - "MSFT"
+  - "AMZN"
+  - "GOOGL"
+  - "META"
+  - "TSLA"
+  - "JPM"
+  - "JNJ"
+  - "V"
+  - "XOM"
+  - "UNH"
+  - "WMT"
+  - "PG"
+  - "HD"
+  - "NFLX"
+  - "CRM"
+  - "BAC"
+  - "BA"
 periods:
   - 1
   - 3
@@ -39,26 +61,7 @@ coint_corr:
 # Perform sentiment rating
 senti:
   base_url: "https://finance.yahoo.com/quote/ticker/news)"
-  stock_list:
-    - "AAPL"
-    - "NVDA"
-    - "MSFT"
-    - "AMZN"
-    - "GOOGL"
-    - "META"
-    - "TSLA"
-    - "JPM"
-    - "JNJ"
-    - "V"
-    - "XOM"
-    - "UNH"
-    - "WMT"
-    - "PG"
-    - "HD"
-    - "NFLX"
-    - "CRM"
-    - "BAC"
-    - "BA"
+  news_ticker_list: "${news_ticker_list}"
   max_scrolls: 20
   model_list:
     - "ProsusAI/finbert"
@@ -69,33 +72,23 @@ senti:
 
 # Plot Strategies
 plot_strat:
+  full: "${full}"
+  drilldown_mapping:
+    entry_type: "Long, Short or Long-Short Strategy"
+    entry_struct: "Entry Method"
+    exit_struct: "Exit Method"
+    stop_method: "Stop Loss Method"
+    hf_model: "HuggingFace FinBERT Sentiment Model"
+    coint_corr_fn: "Cointegration / Correlation Function"
+    period: "Time Period"
   periods: "${periods}"
   min_trading_period: 2
-  strategy_subcols:
-    - "entry_type"
-    - "entry_struct"
-    - "exit_struct"
-    - "stop_loss"
-    - "hf_model"
-    - "coint_corr_fn"
-    - "period"
   analysis_cols:
     - "annualized_return"
     - "win_rate"
     - "total_num_trades"
     - "total_investment"
   top_n: 15
-  non_num_indices:
-    - "entry_type"
-    - "entry_struct"
-    - "exit_struct"
-    - "stop_method"
-    - "hf_model"
-    - "coint_corr_fn"
-    - "stock_ticker_without_trades"
-    - "stock_ticker_with_trades"
-    - "first_trade"
-    - "last_trade"
 
 # Path
 path:
@@ -138,8 +131,8 @@ single:
   entry_struct: "multiple" # multiple, multiple_half, single
   exit_struct: "take_all" # fifo, lifo, half_fifo, half_lifo, take_all
   stop_method: "no_stop" # percent_loss, nearest_loss, latest_loss
-  hf_model: "ziweichen" # prosusai, ziweichen, yiyanghkust, aventiq_ai
-  coint_corr_fn: "coint" # pearsonr, spearmanr, kendalltau, conint
+  hf_model: "prosusai" # prosusai, ziweichen, yiyanghkust, aventiq_ai
+  coint_corr_fn: "kendalltau" # pearsonr, spearmanr, kendalltau, conint
   period: 5
 
 # Run full test

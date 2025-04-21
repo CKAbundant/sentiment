@@ -39,8 +39,6 @@ class TradingStrategy:
             Class instance of concrete implementation of 'ExitSignal' abstract class.
         trades (GetTrades):
             Instance of concrete implementation of 'GetTrades' abstract class.
-        no_trades (list[str]):
-            List of tickers with no completed trades.
     """
 
     def __init__(
@@ -52,7 +50,6 @@ class TradingStrategy:
         self.entry = entry
         self.exit = exit
         self.trades = trades
-        self.no_trades = []
 
     def __call__(self, df_ohlcv: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Generate completed trades based on trading strategy i.e.
@@ -74,10 +71,5 @@ class TradingStrategy:
 
         # Generate trades
         df_trades, df_signals = self.trades.gen_trades(df_pa)
-
-        # Check if completed implementation of 'GenTrades' contaings 'no_trades' attribute
-        self.no_trades = (
-            self.trades.no_trades if hasattr(self.trades, "no_trades") else []
-        )
 
         return df_trades, df_signals

@@ -21,7 +21,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
-from omegaconf import DictConfig
+from omegaconf import DictConfig, ListConfig
 
 from config.variables import (
     CointCorrFn,
@@ -49,8 +49,8 @@ class CalProfitLoss:
     Args:
         path (DictConfig):
             OmegaConf DictConfig containing required folder and file paths.
-        no_trades (list[str]):
-            List of news tickers with no completed trades.
+        news_ticker_list (DictConfig):
+            OmegaConf DictConfig containing list of news tickers.
         date (str):
             If provided, date when news are scraped.
         entry_type (EntryType):
@@ -75,8 +75,8 @@ class CalProfitLoss:
     Attributes:
         path (DictConfig):
             OmegaConf DictConfig containing required folder and file paths.
-        no_trades (list[str]):
-            List of news tickers with no completed trades.
+        news_ticker_list (DictConfig):
+            OmegaConf DictConfig containing list of news tickers.
         date (str):
             If provided, date when news are scraped.
         entry_type (EntryType):
@@ -108,7 +108,7 @@ class CalProfitLoss:
     def __init__(
         self,
         path: DictConfig,
-        no_trades: list[str],
+        news_ticker_list: ListConfig,
         date: str | None = None,
         entry_type: EntryType = "long",
         entry_struct: EntryMethod = "multiple",
@@ -119,7 +119,7 @@ class CalProfitLoss:
         period: int = 5,
     ) -> None:
         self.path = path
-        self.no_trades = no_trades
+        self.news_ticker_list = news_ticker_list
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.entry_type = entry_type
         self.entry_struct = entry_struct
@@ -187,8 +187,8 @@ class CalProfitLoss:
         )
 
         # Get info on stock tickers used to generate news articles
-        no_trades = self.no_trades
-        trades = df["ticker"].unique().tolist()
+        no_trades = self.get_no_trades(df)
+        trades = df["news_ticker"].unique().tolist()
         num_tickers_with_no_trades = len(no_trades)
         num_tickers_with_trades = len(trades)
         total_num_tickers = num_tickers_with_no_trades + num_tickers_with_trades
@@ -291,11 +291,15 @@ class CalProfitLoss:
             for col_tuple in df_breakdown.columns
         ]
 
-        # print(f"df_breakdown after flattening multi-columns : \n\n{df_breakdown}\n")
-
         # 'mean' and 'median' operation generates float output
         # Round to 6 decimal places and convert to decimal type
         df_breakdown = utils.set_decimal_type(df_breakdown, to_round=True)
+
+        # Append 'win_rate' column
+        win_rate = df_breakdown["win_sum"] / df_breakdown["win_count"]
+        df_breakdown["win_rate"] = win_rate.map(
+            lambda num: Decimal(str(num)).quantize(Decimal("1.000000"))
+        )
 
         # Append 'trading_period' column
         days_held = pd.to_datetime(df_breakdown["exit_datetime_max"]) - pd.to_datetime(
@@ -393,3 +397,12 @@ class CalProfitLoss:
         )
 
         return df_highest
+
+    def get_no_trades(self, df_trades: pd.DataFrame) -> list[str]:
+        """Get list of news ticker without completed trades."""
+
+        return [
+            ticker
+            for ticker in self.news_ticker_list
+            if ticker not in df_trades["news_ticker"].unique()
+        ]
