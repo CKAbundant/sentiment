@@ -156,6 +156,7 @@ class PlotNews:
         fig.autofmt_xdate()
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/news_date_period.png")
+        plt.close()
 
     def plot_time(
         self,
@@ -233,6 +234,7 @@ class PlotNews:
         fig.autofmt_xdate()
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/news_time_period.png")
+        plt.close()
 
     def plot_publisher(self, df_news: pd.DataFrame, top_n: int = 20) -> None:
         """Plot histogram of publisher distribution."""
@@ -255,6 +257,7 @@ class PlotNews:
         fig.autofmt_xdate()
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/publisher.png")
+        plt.close()
 
     def plot_word_count(self, df_news: pd.DataFrame) -> None:
         """Plot word count for news title, news content and combined news title
@@ -278,6 +281,7 @@ class PlotNews:
 
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/word_count.png")
+        plt.close()
 
     def plot_top_n(self, df_news: pd.DataFrame, top_n: int = 50) -> None:
         """Plot top N most frequent words, punctuations and special characters
@@ -313,6 +317,7 @@ class PlotNews:
                 plt.savefig(
                     f"{self.graph_date_dir}/top_{top_n}_{component}_{news_type}.png"
                 )
+                plt.close()
 
     def gen_counters(self, df_news: pd.DataFrame) -> dict[str, defaultdict[Counter]]:
         """Generate Counter objects for words, punctuation and special characters

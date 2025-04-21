@@ -28,10 +28,6 @@ plt.rcParams["axes.labelsize"] = 16
 plt.rcParams["xtick.labelsize"] = 14
 plt.rcParams["ytick.labelsize"] = 14
 
-# Set color palette
-palette = sns.color_palette("colorblind", 5)
-sns.set_palette(palette)
-
 
 class PlotStrategies:
     """Plot graphs to analyze performance for all combinations of FinBERT, cointegration/correlation,
@@ -60,13 +56,15 @@ class PlotStrategies:
             Number of past years records for cointegration/correlation computation
             (Default: [1, 2, 3]).
         min_trading_period (int):
-            Minimum trading period to be considered for top N computation (Default: 2).
+            Minimum number of trading period to be considered for top N computation (Default: 2).
         analysis_cols (list[str]):
             List of columns required for analysis
             (Default: ["annualized_return", "win_rate", "total_num_trades,
             "neg_ret_max"]).
         top_n (int):
             Top N ticker pair with highest daily return (Default: 15).
+        palette (str):
+            Seaborn color palette used for overlapping histogram plot (Default: "bright").
 
     Attributes:
         full (ListConfig):
@@ -80,13 +78,15 @@ class PlotStrategies:
             Number of past years records for cointegration/correlation computation
             (Default: [1, 2, 3]).
         min_trading_period (int):
-            Minimum trading period to be considered for top N computation (Default: 2).
+            Minimum number of trading period to be considered for top N computation (Default: 2).
         analysis_cols (list[str]):
             List of columns required for analysis
             (Default: ["annualized_return", "win_rate", "total_num_trades,
             "neg_ret_max"]).
         top_n (int):
             Top N ticker pair with highest daily return (Default: 15).
+        palette (str):
+            Seaborn color palette used for overlapping histogram plot (Default: "bright").
         non_num_indices (list[str]):
             List of non numeric indicies in 'overall_summary.csv'
             (Default: ["entry_type", "entry_struct", "exit_struct", "stop_loss",
@@ -117,9 +117,10 @@ class PlotStrategies:
             "annualized_return",
             "win_rate",
             "total_num_trades",
-            "total_investment",
+            "highest_neg_percent_return",
         ],
         top_n: int = 15,
+        palette: str = "bright",
     ) -> None:
         self.full = full
         self.drilldown_mapping = drilldown_mapping
@@ -128,56 +129,61 @@ class PlotStrategies:
         self.min_trading_period = min_trading_period
         self.analysis_cols = analysis_cols
         self.top_n = top_n
+        self.palette = palette
 
         # Get directory paths
         self.date_dir = f"{path.data_dir}/{self.date}"
         self.graph_date_dir = f"{path.graph_dir}/{self.date}"
         self.combined_path = f"{self.date_dir}/combined_overall.csv"
+        self.top_n_path = f"{self.date_dir}/top_{self.top_n}_tickers.csv"
+        self.pivot_top_n_path = f"{self.date_dir}/pivot_top_{self.top_n}_tickers.csv"
 
     def run(self) -> None:
         # Combine 'overall_summary.csv' info for all combinations
-        df_combined = self.combine_overall()
+        self.combine_overall()
 
         # Generate DataFrame containing top 15 ticker pairs with highest
         # positive annualized return
-        df_top_n, df_pivot_top_n = self.gen_top_n_pairs()
+        self.gen_top_n_pairs()
 
-        print(f"df_top_n : \n\n{df_top_n}\n")
-        print(f"df_pivot_top_n : \n\n{df_pivot_top_n}\n")
+        # Plot histograms of annualized returns for all combinations, all FinBERT,
+        # all cointegration/correlation and all time period
+        self.plot_all()
 
-        # # Plot histograms of annualized returns for all combinations, all FinBERT,
-        # # all cointegration/correlation and all time period
-        # self.plot_all(df_combined)
+        for strat_comp, title in self.drilldown_mapping.items():
+            self.plot_drill_down(strat_comp, title)
 
-        # for strat_comp, title in self.drilldown_mapping.items():
-        #     self.plot_drill_down(df_combined, strat_comp, title)
+        # Plot top N tickers with highest daily return overall and for different
+        # strategy component
+        self.plot_top_all()
 
-        # # Plot top N tickers with highest daily return overall and for different
-        # # strategy component
-        # self.plot_top_all()
+        for strat_comp in self.drilldown_mapping.keys():
+            self.plot_top_strat_comp(strat_comp)
 
-        # for strat_comp in self.drilldown_mapping.keys():
-        #     self.plot_top_strat_comp(strat_comp)
+        # Plot bar chart of common occurring ticker pairs among top_N pairs
+        self.plot_common()
 
-        # # Plot bar chart of common occurring ticker pairs among top_N pairs
-        # self.plot_common(df_top_n)
+        # Plot bar chart of common occuring ticker pairs in increasing top N
+        # i.e. start from top 1 till top N
+        self.plot_successive_common()
 
-        # # Plot bar chart of common occuring ticker pairs in increasing top N
-        # # i.e. start from top 1 till top N
-        # self.plot_successive_common(df_pivot_top_n)
-
-        # return df_combined, df_top_n, df_pivot_top_n
-
-    def plot_all(self, df_combined: pd.DataFrame) -> None:
+    def plot_all(self) -> None:
         """Plot histogram of annualized returns, mean days held, trading period,
         win_rate for all strategies i.e. overall performance."""
 
-        df = df_combined.copy()
+        # Load csv file if exist
+        combined_path = Path(self.combined_path)
+        if not combined_path.is_file():
+            raise FileNotFoundError(
+                f"'combined_overall.csv' is not found at '{self.combined_path}'."
+            )
 
-        _, axes = plt.subplots(nrows=3, ncols=2, figsize=(20, 15))
+        df = utils.load_csv(self.combined_path, tz="America/New_York")
+
+        _, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 15))
 
         for ax, col in zip(axes.flat, self.analysis_cols):
-            sns.histplot(data=df, x=col, ax=ax, kde=True, line_kws={"linewidth": 2})
+            sns.histplot(data=df, x=col, ax=ax, kde=True, line_kws={"linewidth": 3})
 
             # Format text for graphical representation
             col_msg = " ".join([col.title() for col in col.split("_")])
@@ -191,30 +197,34 @@ class PlotStrategies:
 
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/combined_overall.png")
+        plt.close()
 
-    def plot_drill_down(
-        self, df_combined: pd.DataFrame, strat_comp: StratComponent, title: str
-    ) -> None:
+    def plot_drill_down(self, strat_comp: StratComponent, title: str) -> None:
         """Plot histogram of annualized returns, mean days held, trading period,
         win_rate for all strategies for various FinBert models.
 
         Args:
-            df_combined (pd.DataFrame):
-                DataFrame containing combined 'overall_summary.csv' info for
-                specific date.
             strat_comp (StratComponent):
                 Component that makes up the trading strategy e.g. "entry_struct".
             title (str):
                 Title to be displayed in plot.
         """
 
-        if strat_comp not in df_combined.columns:
+        # Load csv file if exist
+        combined_path = Path(self.combined_path)
+        if not combined_path.is_file():
+            raise FileNotFoundError(
+                f"'combined_overall.csv' is not found at '{self.combined_path}'."
+            )
+
+        df = utils.load_csv(self.combined_path, tz="America/New_York")
+
+        if strat_comp not in df.columns:
             raise ValueError(
                 f"'{strat_comp}' is not a valid column name in combined DataFrame."
             )
 
-        df = df_combined.copy()
-        fig, axes = plt.subplots(nrows=3, ncols=2, figsize=(20, 15))
+        _, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 15))
 
         for ax, col in zip(axes.flat, self.analysis_cols):
             sns.histplot(
@@ -223,15 +233,16 @@ class PlotStrategies:
                 hue=strat_comp,
                 ax=ax,
                 kde=True,
-                line_kws={"linewidth": 2},
+                line_kws={"linewidth": 3},
                 legend=True,
-                # alpha=0.3,
+                # alpha=0.7,
+                palette=self.set_palette(df, strat_comp),
             )
 
             # Format text for graphical representation
             col_msg = " ".join([col.title() for col in col.split("_")])
 
-            ax.set_title(f"Frequency Distribution of {col_msg} by {title}")
+            ax.set_title(f"Distribution of {col_msg} by {title}")
             ax.set_xlabel(col_msg)
             ax.set_ylabel("Frequency")
 
@@ -240,14 +251,15 @@ class PlotStrategies:
 
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/combined_{strat_comp}.png")
+        plt.close()
 
     def plot_top_all(self) -> None:
         """Plot top N ticker pairs with overall highest daily return."""
 
-        df_dict = self.get_top_pairs()
-        df = df_dict["all"]
+        df = self.get_top_pairs()
+        print(f"Top N ticker pairs with highest daily return : \n\n{df}\n")
 
-        fig, ax = plt.subplots(figsize=(15, 8))
+        _, ax = plt.subplots(figsize=(15, 8))
         sns.barplot(x=df["ticker_pair"], y=df["overall_daily_ret"], ax=ax)
 
         ax.set_title(
@@ -262,12 +274,15 @@ class PlotStrategies:
 
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/top_{self.top_n}_all.png")
+        plt.close()
 
     def plot_top_strat_comp(self, strat_comp: StratComponent) -> None:
         """Plot top ticker pairs with highest daily return for strategy component."""
 
+        nrows = 3 if strat_comp == "exit_struct" else 2
+
         df_dict = self.get_top_pairs_by_comp(strat_comp)
-        fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 12))
+        _, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(20, 12))
 
         for ax, (comp, df) in zip(axes.flat, df_dict.items()):
             sns.barplot(x=df["ticker_pair"], y=df["overall_daily_ret"], ax=ax)
@@ -282,16 +297,22 @@ class PlotStrategies:
 
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/top_{self.top_n}_{strat_comp}.png")
+        plt.close()
 
     def plot_common(
         self,
-        df_top_n: pd.DataFrame,
         col: str = "ticker_pair",
     ) -> None:
         """Generate bar chart of common occurring
         ticker pairs among top_N pairs"""
 
-        df = df_top_n.copy()
+        top_n_path = Path(self.top_n_path)
+        if not top_n_path.is_file():
+            raise FileNotFoundError(
+                f"'{top_n_path.name}' does not exist at '{self.top_n_path}'."
+            )
+
+        df = utils.load_csv(top_n_path, tz="America/New_York")
 
         # Get top N 'ticker_pair' with highest count
         top_n_pairs = plot_utils.get_top_n(df, col, self.top_n)
@@ -313,20 +334,28 @@ class PlotStrategies:
         fig.autofmt_xdate()
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/top_n_pairs.png")
+        plt.close()
 
     def plot_successive_common(
         self,
-        df_pivot_top_n: pd.DataFrame,
         display_num: int = 10,
     ) -> None:
         """Start with top 1 ticker pair to plot bar chart; Proceed until top N reached."""
 
+        pivot_top_n_path = Path(self.pivot_top_n_path)
+        if not pivot_top_n_path.is_file():
+            raise FileNotFoundError(
+                f"'{pivot_top_n_path.name}' does not exist at '{self.pivot_top_n_path}'."
+            )
+
+        df = utils.load_csv(pivot_top_n_path, index_col=0)
+
         # Top N is limited by number of columns in 'df_pivot_top_n'
-        top_n = min(self.top_n, len(df_pivot_top_n.columns))
+        top_n = min(self.top_n, len(df.columns))
 
         fig, axes = plt.subplots(nrows=round(top_n / 2), ncols=2, figsize=(20, 20))
         for ax, idx in zip(axes.flat, range(top_n)):
-            df_pair_counts = self.gen_pair_counts_df(df_pivot_top_n, idx, display_num)
+            df_pair_counts = self.gen_pair_counts_df(df, display_num)
 
             sns.barplot(x=df_pair_counts.index, y=df_pair_counts["count"], ax=ax)
 
@@ -343,6 +372,7 @@ class PlotStrategies:
 
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/successive_top_n_pairs.png")
+        plt.close()
 
     def gen_pair_counts_df(
         self, df_pivot_top_n: pd.DataFrame, display_num: int = 10
@@ -440,8 +470,8 @@ class PlotStrategies:
                 Pivoted DataFrame where columns are top N tickers.
         """
 
-        top_n_path = Path(f"{self.date_dir}/top_{self.top_n}_tickers.csv")
-        pivot_top_n_path = Path(f"{self.date_dir}/pivot_top_{self.top_n}_tickers.csv")
+        top_n_path = Path(self.top_n_path)
+        pivot_top_n_path = Path(self.pivot_top_n_path)
 
         if top_n_path.is_file() and pivot_top_n_path.is_file():
             print(f"{top_n_path.name} exists at '{top_n_path.as_posix()}'")
@@ -623,24 +653,50 @@ class PlotStrategies:
             )
 
         df = utils.load_csv(top_tickers_path)
-        df = df.loc[:, ["ticker_pair", "overall_daily_ret", "trading_period"]]
+        df = df.loc[
+            :,
+            [
+                "ticker_pair",
+                "overall_daily_ret",
+                "trading_period",
+                "win_rate",
+                "win_count",
+                "neg_ret_mean",
+                "neg_ret_max",
+            ],
+        ]
         df = df.sort_values(by="overall_daily_ret", ascending=False)
         df = df.drop_duplicates(subset="ticker_pair")
 
-        return {"all": df.head(self.top_n).reset_index(drop=True)}
+        return df.head(self.top_n).reset_index(drop=True)
 
-    def get_top_pairs_by_comp(
-        self, data: pd.DataFrame, strat_comp: str
-    ) -> dict[str, pd.DataFrame]:
+    def get_top_pairs_by_comp(self, strat_comp: str) -> dict[str, pd.DataFrame]:
         """Get top ticker pairs for each strategy component e.g. 'hf_model'."""
 
-        df = data.copy()
+        # load 'top_15_tickers.csv' if available
+        top_tickers_path = Path(f"{self.date_dir}/top_{self.top_n}_tickers.csv")
 
+        if not top_tickers_path.is_file():
+            raise FileNotFoundError(
+                f"{top_tickers_path.name} is not present in '{top_tickers_path.as_posix()}'."
+            )
+
+        df = utils.load_csv(top_tickers_path)
+
+        # Filter unique category for selected strat component
         pairs_dict = {}
         for comp in df[strat_comp].unique():
             df_filter = df.loc[
                 df[strat_comp] == comp,
-                ["ticker_pair", "overall_daily_ret", "trading_period"],
+                [
+                    "ticker_pair",
+                    "overall_daily_ret",
+                    "trading_period",
+                    "win_rate",
+                    "win_count",
+                    "neg_ret_mean",
+                    "neg_ret_max",
+                ],
             ]
             df_filter = df_filter.sort_values(by="overall_daily_ret", ascending=False)
             df_filter = df_filter.drop_duplicates(subset="ticker_pair")
@@ -704,3 +760,18 @@ class PlotStrategies:
         )
 
         return df
+
+    def set_palette(
+        self,
+        df_combined: pd.DataFrame,
+        strat_comp: StratComponent,
+    ) -> dict[str, str]:
+        """Set color palette for seaborn histogram plot."""
+
+        # Get all categories for selected strat component
+        categories = df_combined[strat_comp].unique()
+
+        # Get colors from palette based on number of categories
+        palette = sns.color_palette(self.palette, len(categories))
+
+        return dict(zip(categories, palette))

@@ -2,7 +2,7 @@ date: "2025-04-01"
 download_ohlcv: false
 cal_coint_corr: false
 sentiment: false
-test_all: true # true, false, null
+test_all: null # true, false, null
 plot_graph: true
 
 # Entry, exit and trades generation
@@ -74,11 +74,11 @@ senti:
 plot_strat:
   full: "${full}"
   drilldown_mapping:
-    entry_type: "Long, Short or Long-Short Strategy"
+    entry_type: "Entry Strategy"
     entry_struct: "Entry Method"
     exit_struct: "Exit Method"
     stop_method: "Stop Loss Method"
-    hf_model: "HuggingFace FinBERT Sentiment Model"
+    hf_model: "FinBERT Model"
     coint_corr_fn: "Cointegration / Correlation Function"
     period: "Time Period"
   periods: "${periods}"
@@ -87,8 +87,9 @@ plot_strat:
     - "annualized_return"
     - "win_rate"
     - "total_num_trades"
-    - "total_investment"
+    - "highest_neg_percent_return"
   top_n: 15
+  palette: "dark"
 
 # Path
 path:

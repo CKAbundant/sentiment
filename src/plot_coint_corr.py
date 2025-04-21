@@ -113,3 +113,4 @@ class PlotCointCorr:
 
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/coint_corr_{period}y.png")
+        plt.close()
