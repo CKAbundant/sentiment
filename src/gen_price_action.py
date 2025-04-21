@@ -343,7 +343,7 @@ class GenPriceAction:
 
         Returns:
             df_trades (pd.DataFrame):
-                List of DataFrames containing completed trades for specific news ticker.
+                DataFrames containing completed trades for specific news ticker.
         """
 
         df = df_av.copy()
@@ -353,7 +353,7 @@ class GenPriceAction:
         coint_corr_list = self.get_topn_tickers(ticker, df_coint_corr)
 
         if coint_corr_list is None:
-            return pd.DataFrame(), []
+            return pd.DataFrame()
 
         for coint_corr_ticker in coint_corr_list:
             # Generate and save DataFrame for each cointegrated stock
