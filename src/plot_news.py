@@ -147,7 +147,12 @@ class PlotNews:
             duration = f"{(max_date - min_date).days} days"
 
             # Offset text by 2 days for proper formatting
-            ax.text(min_date + timedelta(days=2), index, duration)
+            ax.annotate(
+                duration,
+                xy=(min_date + (max_date - min_date) / 2, index),
+                ha="center",
+                va="bottom",
+            )
 
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
@@ -225,7 +230,13 @@ class PlotNews:
             max_minutes,
         ) in df_time.itertuples(index=True, name=None):
             msg = f"({min_time.strftime("%H%M hrs")}, {max_time.strftime("%H%M hrs")})"
-            ax.text(min_minutes, index, msg)
+            # ax.text(min_minutes, index, msg)
+            ax.annotate(
+                msg,
+                xy=(min_minutes + (max_minutes - min_minutes) / 2, index),
+                ha="center",
+                va="bottom",
+            )
 
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
@@ -307,8 +318,6 @@ class PlotNews:
                 ax.set_title(f"Top {top_n} '{component}' for News {news_type.title()}")
                 ax.set_xlabel(component)
                 ax.set_ylabel("Counts")
-                ax.tick_params(axis="x")
-                ax.tick_params(axis="y")
 
                 if component == "word":
                     ax.tick_params(axis="x", labelrotation=30)

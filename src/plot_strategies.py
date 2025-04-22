@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.axes import Axes
 from omegaconf import DictConfig, ListConfig
 from tqdm import tqdm
 
@@ -22,7 +23,7 @@ from config.variables import StratComponent
 from src.utils import plot_utils, utils
 
 # Set default fontsize for labels and ticks
-plt.rcParams["font.size"] = 12
+plt.rcParams["font.size"] = 14
 plt.rcParams["axes.titlesize"] = 18
 plt.rcParams["axes.labelsize"] = 16
 plt.rcParams["xtick.labelsize"] = 14
@@ -139,33 +140,36 @@ class PlotStrategies:
         self.pivot_top_n_path = f"{self.date_dir}/pivot_top_{self.top_n}_tickers.csv"
 
     def run(self) -> None:
-        # Combine 'overall_summary.csv' info for all combinations
-        self.combine_overall()
+        # # Combine 'overall_summary.csv' info for all combinations
+        # self.combine_overall()
 
-        # Generate DataFrame containing top 15 ticker pairs with highest
-        # positive annualized return
-        self.gen_top_n_pairs()
+        # # Generate DataFrame containing top 15 ticker pairs with highest
+        # # positive annualized return
+        # self.gen_top_n_pairs()
 
-        # Plot histograms of annualized returns for all combinations, all FinBERT,
-        # all cointegration/correlation and all time period
-        self.plot_all()
+        # # Plot histograms of annualized returns for all combinations, all FinBERT,
+        # # all cointegration/correlation and all time period
+        # self.plot_all()
 
-        for strat_comp, title in self.drilldown_mapping.items():
-            self.plot_drill_down(strat_comp, title)
+        # for strat_comp, title in self.drilldown_mapping.items():
+        #     self.plot_drill_down(strat_comp, title)
 
-        # Plot top N tickers with highest daily return overall and for different
-        # strategy component
-        self.plot_top_all()
+        # Plot mean annualized returns for each strategy component
+        self.plot_strat_comp()
 
-        for strat_comp in self.drilldown_mapping.keys():
-            self.plot_top_strat_comp(strat_comp)
+        # # Plot top N tickers with highest daily return overall and for different
+        # # strategy component
+        # self.plot_top_all()
 
-        # Plot bar chart of common occurring ticker pairs among top_N pairs
-        self.plot_common()
+        # for strat_comp in self.drilldown_mapping.keys():
+        #     self.plot_top_strat_comp(strat_comp)
 
-        # Plot bar chart of common occuring ticker pairs in increasing top N
-        # i.e. start from top 1 till top N
-        self.plot_successive_common()
+        # # Plot bar chart of common occurring ticker pairs among top_N pairs
+        # self.plot_common()
+
+        # # Plot bar chart of common occuring ticker pairs in increasing top N
+        # # i.e. start from top 1 till top N
+        # self.plot_successive_common()
 
     def plot_all(self) -> None:
         """Plot histogram of annualized returns, mean days held, trading period,
@@ -292,6 +296,9 @@ class PlotStrategies:
             ax.set_ylabel("Daily Returns")
             ax.tick_params(axis="x", rotation=30)
 
+        # Hide unused axes
+        self.hide_unused_ax(axes.flat, list(df_dict.keys()))
+
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
 
@@ -300,7 +307,7 @@ class PlotStrategies:
         plt.close()
 
     def plot_strat_comp(self) -> None:
-        """Plot mean annualized returns for each strat componets"""
+        """Plot mean annualized returns for each strat components"""
 
         # Load csv file if exist
         combined_path = Path(self.combined_path)
@@ -311,17 +318,65 @@ class PlotStrategies:
 
         df = utils.load_csv(self.combined_path, tz="America/New_York")
 
-        info_dict = self.gen_mean_annual_ret(df)
+        # Generate dictionary mapping strat component to mean annual returns
+        strat_dict = self.gen_mean_annual_ret(df)
+
+        # Set number of subplots
         plot_size = 4
         strat_comp_list = list(self.drilldown_mapping.keys())
 
+        # Create folder if not exist
+        utils.create_folder(self.graph_date_dir)
+
+        # Generate 4 bar plots in single plot each time
         for idx in range(0, len(strat_comp_list), plot_size):
-            batch = strat_comp_list[idx: idx+plot_size]
-            for batch
+            batch = strat_comp_list[idx : idx + plot_size]
             _, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 15))
 
-            for ax, 
+            for ax, strat_comp in zip(axes.flat, batch):
+                df_ret = self.gen_annual_ret_df(strat_dict[strat_comp], strat_comp)
+                msg = " ".join([item.title() for item in strat_comp.split("_")])
 
+                # Create color palette for positive and negative returns
+                colors = [
+                    "red" if ret < 0 else "green"
+                    for ret in df_ret["mean_annual_ret"].to_list()
+                ]
+
+                # Setting hue is required if using palette
+                sns.barplot(
+                    x=df_ret[strat_comp],
+                    y=df_ret["mean_annual_ret"],
+                    hue=df_ret[strat_comp],
+                    palette=colors,
+                    legend=False,
+                    ax=ax,
+                )
+
+                ax.set_title(f"Mean Annualized Returns by {msg}")
+                ax.set_xlabel(f"{msg}")
+                ax.set_ylabel(f"Mean Annualized Returns")
+                ax.set_ylim(-0.015, 0.08)  # Ensure consistent y-axis for all subplots
+
+                # Rotate x axis label by 30 degree except for 'period' strat component
+                if strat_comp != "period":
+                    ax.tick_params(axis="x", labelrotation=30)
+
+                # Annotate annualized returns
+                for bar in ax.patches:
+                    ax.annotate(
+                        bar.get_height(),
+                        (bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                        ha="center",
+                        va="bottom" if bar.get_height() >= 0 else "top",
+                    )
+
+            # Hide unused axes
+            self.hide_unused_ax(axes.flat, batch)
+
+            plt.tight_layout()
+            plt.savefig(f"{self.graph_date_dir}/strat_comp_rets_{idx}.png")
+            plt.close()
 
     def plot_common(
         self,
@@ -349,8 +404,6 @@ class PlotStrategies:
         ax.set_title(f"Top {self.top_n} Ticker Pair by Frequency")
         ax.set_xlabel("Ticker Pair")
         ax.set_ylabel("Counts")
-        ax.tick_params(axis="x")
-        ax.tick_params(axis="y")
 
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
@@ -806,12 +859,53 @@ class PlotStrategies:
 
         info_dict = defaultdict(dict)
 
-        for strat_comp in self.drilldown_mapping:
+        for strat_comp in self.drilldown_mapping.keys():
             for category in df_combined[strat_comp].unique():
-                info_dict[strat_comp][category] = Decimal(
+                cat = f"period_{category}y" if strat_comp == "period" else category
+                info_dict[strat_comp][cat] = Decimal(
                     df_combined.loc[
                         df_combined[strat_comp] == category, "annualized_return"
                     ].mean()
                 ).quantize(Decimal("1.000000"))
 
         return dict(info_dict)
+
+    def hide_unused_ax(self, ax_list: list[Axes], item_list: list[str]) -> None:
+        """Hide unused axes when 'ax_list' contains more items than 'item_list'."""
+
+        if (diff := len(ax_list) - len(item_list)) > 0:
+            # Get unused axes i.e. starting from last item in list
+            for idx in range(diff):
+                ax_list[-idx - 1].set_visible(False)
+
+    def gen_annual_ret_df(
+        self, strat_dict: dict[str, Decimal], strat_comp: StratComponent
+    ) -> pd.DataFrame:
+        """Convert dictionary mapping strat component to mean annualized return
+        DataFrame.
+
+        Args:
+            strat_dict (dict[str, Decimal]):
+                Dictionary mapping categories of different strat component to its
+                mean annualized return.
+            strat_comp (StratComponent):
+                Component making up the trading strategy.
+
+        Returns:
+            (pd.DataFrame):
+                DataFrame containing strat component and mean annualized return.
+        """
+
+        # Convert to DataFrame where index is the categories for strat component
+        df = pd.DataFrame.from_dict(strat_dict, orient="index")
+
+        # Convert strat component from index to column
+        df = df.reset_index()
+        df.columns = [strat_comp, "mean_annual_ret"]
+
+        # Sort by 'mean_annual_ret' in descending order
+        df = df.sort_values(by=["mean_annual_ret"], ascending=False).reset_index(
+            drop=True
+        )
+
+        return df
