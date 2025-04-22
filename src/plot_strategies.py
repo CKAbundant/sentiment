@@ -6,7 +6,7 @@
 """
 
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from decimal import Decimal
 from itertools import product
 from pathlib import Path
@@ -282,7 +282,7 @@ class PlotStrategies:
         nrows = 3 if strat_comp == "exit_struct" else 2
 
         df_dict = self.get_top_pairs_by_comp(strat_comp)
-        _, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(20, 12))
+        _, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(20, 15))
 
         for ax, (comp, df) in zip(axes.flat, df_dict.items()):
             sns.barplot(x=df["ticker_pair"], y=df["overall_daily_ret"], ax=ax)
@@ -298,6 +298,30 @@ class PlotStrategies:
         plt.tight_layout()
         plt.savefig(f"{self.graph_date_dir}/top_{self.top_n}_{strat_comp}.png")
         plt.close()
+
+    def plot_strat_comp(self) -> None:
+        """Plot mean annualized returns for each strat componets"""
+
+        # Load csv file if exist
+        combined_path = Path(self.combined_path)
+        if not combined_path.is_file():
+            raise FileNotFoundError(
+                f"'combined_overall.csv' is not found at '{self.combined_path}'."
+            )
+
+        df = utils.load_csv(self.combined_path, tz="America/New_York")
+
+        info_dict = self.gen_mean_annual_ret(df)
+        plot_size = 4
+        strat_comp_list = list(self.drilldown_mapping.keys())
+
+        for idx in range(0, len(strat_comp_list), plot_size):
+            batch = strat_comp_list[idx: idx+plot_size]
+            for batch
+            _, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 15))
+
+            for ax, 
+
 
     def plot_common(
         self,
@@ -775,3 +799,19 @@ class PlotStrategies:
         palette = sns.color_palette(self.palette, len(categories))
 
         return dict(zip(categories, palette))
+
+    def gen_mean_annual_ret(self, df_combined: pd.DataFrame) -> dict[str, Decimal]:
+        """Generate dictionary mapping strat component to mean annualized
+        returns."""
+
+        info_dict = defaultdict(dict)
+
+        for strat_comp in self.drilldown_mapping:
+            for category in df_combined[strat_comp].unique():
+                info_dict[strat_comp][category] = Decimal(
+                    df_combined.loc[
+                        df_combined[strat_comp] == category, "annualized_return"
+                    ].mean()
+                ).quantize(Decimal("1.000000"))
+
+        return dict(info_dict)

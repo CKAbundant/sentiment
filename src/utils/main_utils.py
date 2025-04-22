@@ -68,20 +68,20 @@ def run_strategies(date: str, snp500_list: list[str], cfg: DictConfig) -> None:
         coint_corr_fn,
         period,
     ) in tqdm(combi_list):
-        # # Generate price actions of top 10 cointegrated/correlated stocks
-        # gen_pa = GenPriceAction(
-        #     date=date,
-        #     snp500_list=snp500_list,
-        #     entry_type=ent_type,
-        #     entry_struct=ent_struct,
-        #     exit_struct=ex_struct,
-        #     stop_method=stop_method,
-        #     hf_model=hf_model,
-        #     coint_corr_fn=coint_corr_fn,
-        #     period=period,
-        #     **cfg.std,
-        # )
-        # gen_pa.run()
+        # Generate price actions of top 10 cointegrated/correlated stocks
+        gen_pa = GenPriceAction(
+            date=date,
+            snp500_list=snp500_list,
+            entry_type=ent_type,
+            entry_struct=ent_struct,
+            exit_struct=ex_struct,
+            stop_method=stop_method,
+            hf_model=hf_model,
+            coint_corr_fn=coint_corr_fn,
+            period=period,
+            **cfg.std,
+        )
+        gen_pa.run()
 
         # Calculate overall summary, breakdown summary and top ticker pairs
         # with highest daily return for each news ticker
