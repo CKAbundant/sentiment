@@ -145,6 +145,7 @@ class PlotStrategies:
             "trading_period",
             "win_rate",
             "win_count",
+            "days_held_max",
             "neg_ret_mean",
             "neg_ret_max",
         ],
@@ -389,7 +390,9 @@ class PlotStrategies:
             min_ret = df["min"].min()
 
             # Create color palette for positive and negative returns
-            colors = ["red" if ret < 0 else "green" for ret in df[stat].to_list()]
+            colors = [
+                "red" if ret < 0 else "green" for ret in df_sorted[stat].to_list()
+            ]
 
             # Setting hue is required if using palette
             sns.barplot(
