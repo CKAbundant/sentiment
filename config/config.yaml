@@ -89,8 +89,17 @@ plot_strat:
     - "total_num_trades"
     - "highest_neg_percent_return"
   top_n: 15
-  palette: "dark"
-
+  top_n_common: 10
+  palette: "dark" # https://seaborn.pydata.org/tutorial/color_palettes.html
+  disp_cols: 
+    - "ticker_pair"
+    - "overall_daily_ret"
+    - "trading_period"
+    - "win_rate"
+    - "win_count"
+    - "neg_ret_mean"
+    - "neg_ret_max"
+    
 # Path
 path:
   # directory path
