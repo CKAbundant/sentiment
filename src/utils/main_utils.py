@@ -100,24 +100,27 @@ def run_strategies(date: str, snp500_list: list[str], cfg: DictConfig) -> None:
         _, _, _ = cal_pl.run()
 
 
-def convert_to_decimal(val: np.number) -> Decimal:
-    return Decimal(str(round(val, 6)))
-
-
 def gen_stats(
     combined: pd.DataFrame,
     strat_comp: str,
-    comp: str,
-    cols=["annualized_return", "win_rate", "max_days_held"],
+    category: str,
+    analysis_cols=[
+        "annualized_return",
+        "win_rate",
+        "max_days_held",
+        "mean_neg_percent_return",
+        "highest_neg_percent_return",
+    ],
 ) -> pd.DataFrame:
-    results = combined.loc[:, cols].mean()
-    results = results.map(convert_to_decimal)
+    # Generate Panda Series containing mean value for each analysis column
+    results = combined.loc[:, analysis_cols].mean()
+    results = results.map(lambda val: Decimal(str(round(val, 6))))
 
     # Convert to DataFrame and transpose
     df = pd.DataFrame(results).T
 
     # Append 'strat_comp' and 'comp'
-    df.insert(0, "comp", comp)
+    df.insert(0, "category", category)
     df.insert(0, "strat_comp", strat_comp)
 
     return df
@@ -125,17 +128,32 @@ def gen_stats(
 
 def gen_stats_df(
     df_combined_overall: pd.DataFrame,
-    strat_comp_list: list[str] = ["hf_model", "coint_corr_fn", "period"],
-    analysis_list: list[str] = ["annualized_return", "win_rate", "max_days_held"],
+    strat_comp_list: list[str] = [
+        "entry_type",
+        "entry_struct",
+        "exit_struct",
+        "stop_method",
+        "hf_model",
+        "coint_corr_fn",
+        "period",
+    ],
+    analysis_list: list[str] = [
+        "annualized_return",
+        "win_rate",
+        "max_days_held",
+        "mean_neg_percent_return",
+        "highest_neg_percent_return",
+    ],
 ) -> pd.DataFrame:
-    """Generate DataFrame containing
+    """Generate statistics of combined overall summary for all strategies.
 
     Args:
         df_combined_overall (pd.DataFrame):
-            DataFrame containing overall summary for all 48 strategies.
+            DataFrame containing overall summary for all strategies.
         strat_comp_list (list[str]):
             List of component for strategies
-            (Default: ["hf_model", "coint_corr_fn", "period"]).
+            (Default: ["entry_type", "entry_struct", "exit_struct",
+            "stop_method", "hf_model", "coint_corr_fn", "period"]).
 
     Returns:
         (pd.DataFrame):
@@ -147,10 +165,13 @@ def gen_stats_df(
 
     for strat_comp in strat_comp_list:
         # Get unique component of strategy component
-        for comp in df[strat_comp].unique():
+        for category in df[strat_comp].unique():
             df_list.append(
                 gen_stats(
-                    df.loc[df[strat_comp] == comp, :], strat_comp, comp, analysis_list
+                    df.loc[df[strat_comp] == category, :],
+                    strat_comp,
+                    category,
+                    analysis_list,
                 )
             )
 
