@@ -190,9 +190,9 @@ class PlotStrategies:
             self.analysis_cols,
         )
 
-        # # Plot histograms of annualized returns, win rate, number of trades and
-        # # highet negative returns for all strategy combinations
-        # self.plot_overall()
+        # Plot histograms of annualized returns, win rate, number of trades and
+        # highet negative returns for all strategy combinations
+        self.plot_overall()
 
         # Plot top N tickers with highest daily return overall
         self.plot_top_ticker_pairs()
@@ -214,9 +214,9 @@ class PlotStrategies:
         # Plot bar chart of common occurring ticker pairs among top_N pairs
         self.plot_common()
 
-        # # Plot bar chart of common occuring ticker pairs in increasing top N
-        # # i.e. start from top 1 till top N
-        # self.plot_successive_common()
+        # Plot bar chart of common occuring ticker pairs in increasing top N
+        # i.e. start from top 1 till top N
+        self.plot_successive_common()
 
     def plot_overall(self) -> None:
         """Plot histogram of annualized returns, mean days held, trading period,
@@ -446,7 +446,8 @@ class PlotStrategies:
             ax.set_xlabel(f"{comp_str}")
             ax.set_ylabel(f"{stat_str} Annualized Returns")
             ax.set_ylim(
-                min_ret - Decimal("0.05"), max_ret + Decimal("0.05")
+                (min_ret - abs(min_ret * Decimal("0.1"))),
+                (max_ret + abs(max_ret * Decimal("0.1"))),
             )  # Ensure consistent y-axis for all subplots
             # ax.tick_params(axis="x", labelrotation=30)
 
