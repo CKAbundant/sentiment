@@ -208,12 +208,12 @@ def format_breakdown_df(
     ]
     df = df.sort_values(by="overall_daily_ret", ascending=False).reset_index(drop=True)
 
+    # Get top N ticker pairs
+    df = df.head(top_n)
+
     # Insert 'ticker_pair', strategy component columns
     df.insert(0, "ticker_pair", df["news_ticker"] + "_" + df["ticker"])
     df = insert_strat_cols(df, strat_comp_list, strat_comp_cols)
-
-    # Get top N ticker pairs
-    df = df.head(top_n)
 
     return df
 

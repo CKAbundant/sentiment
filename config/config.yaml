@@ -1,8 +1,8 @@
-date: "2025-04-01"
-download_ohlcv: false
-cal_coint_corr: false
-sentiment: false
-test_all: null # true, false, null
+date: null
+download_ohlcv: true
+cal_coint_corr: true
+sentiment: true
+test_all: true # true, false, null
 plot_graph: true
 
 # Entry, exit and trades generation

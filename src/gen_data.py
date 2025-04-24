@@ -52,7 +52,7 @@ class GenData:
         base_url (str):
             URL to Yahoo Finance to specifics stock news by replacing 'ticker' with
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news").
-        stock_list (list[str]):
+        news_ticker_list (list[str]):
             List of stocks for POC studies (Default: ["AAPL", "NVDA", "MSFT", "AMZN",
             "GOOGL", "META", "TSLA", "JPM", "JNJ", "V", "XOM", "UNH", "WMT", "PG",
             "HD", "NFLX", "CRM", "BAC", "BA"]).
@@ -73,7 +73,7 @@ class GenData:
         base_url (str):
             URL to Yahoo Finance to specifics stock news by replacing 'ticker' with
             stock symbol (Default: "https://finance.yahoo.com/quote/ticker/news).
-        stock_list (list[str]):
+        news_ticker_list (list[str]):
             List of stocks for POC studies (Default: ["AAPL", "NVDA", "MSFT", "AMZN",
             "GOOGL", "META", "TSLA", "JPM", "JNJ", "V", "XOM", "UNH", "WMT", "PG",
             "HD", "NFLX", "CRM", "BAC", "BA"]).
@@ -95,7 +95,7 @@ class GenData:
         self,
         date: str | None = None,
         base_url: str = "https://finance.yahoo.com/quote/{ticker}/news",
-        stock_list: list[str] = [
+        news_ticker_list: list[str] = [
             "AAPL",
             "NVDA",
             "MSFT",
@@ -127,7 +127,7 @@ class GenData:
     ):
         self.date = date or utils.get_current_dt(fmt="%Y-%m-%d")
         self.base_url = base_url
-        self.stock_list = stock_list
+        self.news_ticker_list = news_ticker_list
         self.max_scrolls = max_scrolls
         self.model_list = model_list
         self.date_dir = f"{data_dir}/{self.date}"
@@ -144,7 +144,7 @@ class GenData:
         if not Path(self.date_dir).is_dir():
             utils.create_folder(self.date_dir)
 
-        for ticker in self.stock_list:
+        for ticker in self.news_ticker_list:
             print(f"\nticker : {ticker}")
             # Get current datetime as "YYYYMM-DD_HHMM" string
             scrape_dt = utils.get_current_dt()

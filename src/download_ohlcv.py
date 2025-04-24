@@ -3,6 +3,7 @@
 import time
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import yfinance as yf
@@ -77,14 +78,6 @@ class DownloadOHLCV:
 
     def run(self) -> None:
         """Download tickers if new data is available."""
-
-        # Determine if existing OHLCV data is the latest
-        if self.is_latest():
-            print(
-                f"\nLatest OHLCV has already been downloaded. No futher action taken!"
-            )
-            return
-
         self.download_tickers()
 
         tries = 0
@@ -96,27 +89,25 @@ class DownloadOHLCV:
             self.download_tickers(self.unsuccessful)
             tries += 1
 
-    def is_latest(self) -> bool:
-        """Check if existing downloaded OHLCV data (using 'AAPL', 'WMT', and 'JPM')
-        is the latest."""
+    def is_latest(self, file_path: str) -> bool:
+        """Check if existing downloaded OHLCV data is the latest."""
 
-        latest_dates = []
-        for ticker in ["AAPL", "WMT", "JPM"]:
-            file_path = Path(f"{self.stock_dir}/{ticker}.parquet")
+        # Load OHLCV parquet file as DataFrame
+        df = pd.read_parquet(file_path)
 
-            if not file_path.is_file():
-                return False
+        # Get latest date in ohlcv parquet file as datetime.date object
+        latest_date = pd.to_datetime(df.index.max()).date()
 
-            df = pd.read_parquet(file_path)
+        # Set 'self.end_date' to New York timezoine and convert to datetime.date object
+        end_date = (
+            datetime.strptime(self.end_date, "%Y-%m-%d")
+            .astimezone(ZoneInfo("America/New_York"))
+            .date()
+        )
 
-            # Get latest date
-            latest_date = datetime.strftime(df.index.max(), format="%Y-%m-%d")
-            latest_dates.append(latest_date)
-
-        # Get first item from sorted 'latest_dates'
-        last_date = sorted(latest_dates, reverse=False)[0]
-
-        return last_date >= self.end_date
+        # Check if latest date in ohlcv parquet is later than the required end date
+        # for download
+        return latest_date >= end_date
 
     def _init_session(self) -> None:
         """Combine 'requests_cache' with rate-limiting to avoid Yahoo's rate-limiter.
@@ -153,12 +144,19 @@ class DownloadOHLCV:
             desc="Downloading from yfinance",
             total=len(stock_list),
         ):
-            try:
-                file_path = f"{self.stock_dir}/{ticker}.parquet"
+            # File path to OHLCV data for ticker
+            file_path = f"{self.stock_dir}/{ticker}.parquet"
 
+            if Path(file_path).is_file() and self.is_latest(file_path):
+                # Latest OHLCV data already exist
+                continue
+
+            try:
                 if Path(file_path).is_file():
+
                     # Load and update existing OHLCV with latest data
                     df = self.update_ohlcv(ticker, file_path)
+
                 else:
                     # Download full OHLCV data
                     df = self.download_ticker(ticker, start_date=self.start_date)

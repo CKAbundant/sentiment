@@ -1,13 +1,11 @@
 """Class to perform cointegration for S&P 500 stocks"""
 
+import functools
 from itertools import combinations
 from pathlib import Path
 from typing import get_args
 
-import matplotlib.pyplot as plt
-import networkx as nx
 import pandas as pd
-from matplotlib.figure import Figure
 from omegaconf import DictConfig
 from scipy import stats
 from statsmodels.tsa.stattools import coint
@@ -119,7 +117,7 @@ class CalCointCorr:
 
         records = []
 
-        for ticker1, ticker2 in combinations(updated_list, 2):
+        for ticker1, ticker2 in tqdm(combinations(updated_list, 2)):
             print(f"{ticker1}-{ticker2} [num_years : {num_years}]")
 
             try:
@@ -257,3 +255,65 @@ class CalCointCorr:
         req_earliest = self.cal_req_earliest(df, num_years)
 
         return earliest <= req_earliest
+
+    def get_kendall_tickers(self, threshold: float = 0.5) -> dict[str, list[str]]:
+        """Get list of stock tickers whose kendall tau correlation is less than threshold.
+
+        Args:
+            threshold (float): Threshold for correlation value.
+
+        Returns:
+            ticker_dict (dict[str, list[str]]):
+                Dictionary mapping period to list of tickers whose kendall tau
+                correlation <= threshold.
+        """
+
+        # Initialize dict with 1, 3 and 5 years period key.
+        ticker_dict = {period: [] for period in self.periods}
+
+        for ticker in self.snp500_list:
+            for period in self.periods:
+                # load cointegration/correlation DataFrame with required period
+                corr = pd.read_csv(
+                    f"{self.coint_corr_date_dir}/coint_corr_{period}y.csv"
+                )
+
+                # Locate ticker pairs with kendall tau correlation > threshold
+                df_above = corr.loc[
+                    ((corr["ticker1"] == ticker) | (corr["ticker2"] == ticker))
+                    & (corr["kendalltau"] > 0.5),
+                    :,
+                ]
+
+                # Update 'ticker_dict' if 'df_above' is empty i.e. no kendall tau
+                # correlation > threshold
+                if df_above.empty:
+                    ticker_dict[period].append(ticker)
+
+        return ticker_dict
+
+    def get_kendall_stats(self, ticker_dict: dict[str, list[str]]) -> None:
+        """Display intersection and union between 1, 3 and 5 years period."""
+
+        # Get intersection between different periods
+        for combi in combinations(self.periods, 2):
+            p1, p2 = combi
+            intersection = set(ticker_dict[p1]) & set(ticker_dict[p2])
+
+            print(
+                f"Intersection between period {p1} and period {p2} "
+                f"[total: {len(intersection)}]: {intersection}"
+            )
+
+        # Get common tickers in all periods
+        inter_all = functools.reduce(
+            lambda list1, list2: set(list1) & set(list2), ticker_dict.values()
+        )
+
+        # Get all tickers found in all periods
+        union_all = functools.reduce(
+            lambda list1, list2: set(list1) | set(list2), ticker_dict.values()
+        )
+
+        print(f"\nCommon tickers : \n\n{inter_all}\n")
+        print(f"All tickers : \n\n{union_all}\n")
