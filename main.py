@@ -1,7 +1,6 @@
 """Main function to execute."""
 
 import sys
-from itertools import product
 from pathlib import Path
 
 import pandas as pd

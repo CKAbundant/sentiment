@@ -1,8 +1,8 @@
-date: null
-download_ohlcv: true
-cal_coint_corr: true
-sentiment: true
-test_all: true # true, false, null
+date: "2025-04-01"
+download_ohlcv: false
+cal_coint_corr: false
+sentiment: false
+test_all: null # true, false, null
 plot_graph: true
 
 # Entry, exit and trades generation
@@ -86,9 +86,9 @@ plot_strat:
   analysis_cols:
     - "annualized_return"
     - "win_rate"
-    - "total_num_trades"
+    - "max_days_held"
     - "highest_neg_percent_return"
-  top_n: 15
+  top_n: 10
   top_n_common: 10
   palette: "dark" # https://seaborn.pydata.org/tutorial/color_palettes.html
   disp_cols: 

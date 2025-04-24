@@ -387,57 +387,77 @@ def insert_strat_cols(
     return df
 
 
-def gen_ret_df_dict(
-    combined_path: str, strat_comp_cols: list[str]
-) -> dict[str, pd.DataFrame]:
-    """Generate dictionary mapping strat component to minimum, maximum and
-    mean annualized returns.
+def gen_stats_comp_dict(
+    combined_path: str,
+    strat_comp_cols: list[str] = [
+        "entry_type",
+        "entry_struct",
+        "exit_struct",
+        "stop_method",
+        "hf_model",
+        "coint_corr_fn",
+        "period",
+    ],
+    analysis_list: list[str] = [
+        "annualized_return",
+        "win_rate",
+        "max_days_held",
+        "highest_neg_percent_return",
+    ],
+) -> defaultdict[str, dict[str, pd.DataFrame]]:
+    """Generate min, max, mean, median of items in 'analysis_list' for all strat
+    components.
 
     Args:
         combined_path (str):
-            Relative path to csv file combining trade results data for all strategies.
-        strat_comp_cols (list[str])
-            List of components making up trading strategy.
+            Relative path to 'combined_overall.csv' for specific date.
+        strat_comp_cols (list[str]):
+            List of component for strategies
+            (Default: ["entry_type", "entry_struct", "exit_struct",
+            "stop_method", "hf_model", "coint_corr_fn", "period"]).
+        analysis_list: (list[str]):
+            List of columns for analysis (Default: ["annualized_return",
+            "win_rate", "max_days_held", "highest_neg_percent_return"])
 
     Returns:
-        df_dict (dict[str, pd.DataFrame]):
-            Dictionary mapping strat component to its annualized returns DataFrame.
+        df_dict (defaultdict[str, dict[str, pd.DataFrame]]):
+            Dictionary mapping strat component to statistics of selected
+            attributes.
     """
 
     # Load csv file if exist
     combined_path = Path(combined_path)
+    date_dir = combined_path.parent
+
     if not combined_path.is_file():
         raise FileNotFoundError(
             f"'combined_overall.csv' is not found at '{combined_path}'."
         )
 
-    df_combined = utils.load_csv(combined_path, tz="America/New_York")
-    df_dict = {}
+    # Filter columns to 'analysis_list'
+    df = utils.load_csv(combined_path, tz="America/New_York")
+    df_dict = defaultdict(dict)
 
-    # Iterate through all strategy components
     for strat_comp in strat_comp_cols:
-        ret_dict = {}
+        for attribute in analysis_list:
+            # Group by strat component and determine min, max, mean, median of
+            # selected attributes
+            df_comp = df.groupby(by=[strat_comp]).agg(
+                {attribute: ["min", "max", "mean", "median"]}
+            )
 
-        # Get unique category for each strat component
-        for category in df_combined[strat_comp].unique():
-            # E.g. Amend '1' to 'period_1y' to ensure proper plotting
-            cat = f"period_{category}y" if strat_comp == "period" else category
-            df_category = df_combined.loc[
-                df_combined[strat_comp] == category, "annualized_return"
-            ]
+            # Flatten multi-level columns by keeping the 2nd level
+            df_comp.columns = [col_tuple[1] for col_tuple in df_comp.columns]
 
-            # Update 'info_dict' with mean annualized return for each category
-            ret_dict[cat] = {
-                "min": Decimal(df_category.min()).quantize(Decimal("1.000000")),
-                "max": Decimal(df_category.max()).quantize(Decimal("1.000000")),
-                "mean": Decimal(df_category.mean()).quantize(Decimal("1.000000")),
-                "median": Decimal(df_category.median()).quantize(Decimal("1.000000")),
-            }
+            # Convert all values to Decimal type before updating 'df_dict'
+            # because mean and median generates float instead of Decimal object
+            df_comp = df_comp.map(
+                lambda val: Decimal(str(val)).quantize(Decimal("1.000000"))
+            )
+            df_dict[strat_comp][attribute] = df_comp
 
-            # Convert 'ret_dict' to DataFrame
-            df_ret = pd.DataFrame.from_dict(ret_dict, orient="index")
-            df_ret.index.names = [strat_comp]
-            df_dict[strat_comp] = df_ret
+    # Save dictionary as pickle object
+    utils.save_pickle(df_dict, date_dir.joinpath("strat_comp_dict.pkl"))
 
     return df_dict
 
@@ -474,24 +494,6 @@ def convert_to_valid_type(df_overall: pd.DataFrame) -> pd.DataFrame:
     )
 
     return df
-
-
-def get_top_n(df: pd.DataFrame, col: str, top_n: int) -> pd.Series:
-    """Return top N items for selected column in DataFrame as Panda Series.
-
-    Args:
-        data (pd.DataFrame): DataFrame of concern.
-        col (str): Column in DataFrame to perform value_count.
-        top_n (int): Top N unique item in selected column by frequency.
-
-    Returns:
-        (pd.Series): Sorted value count by 'top_n'.
-    """
-
-    # Get frequency of unique items and filter top N by frequency
-    value_count = df[col].value_counts()
-
-    return value_count.head(top_n)
 
 
 def gen_pair_counts_df(
@@ -564,3 +566,11 @@ def validate_mapping(
     assert sorted(list(get_args(literal))) == sorted(list(mapping.keys()))
 
     return mapping
+
+
+def get_top_n(df: pd.DataFrame, col: str, top_n: int = 10) -> pd.Series:
+    """Get top frequently occuring categories for selected col."""
+
+    value_count = df[col].value_counts()
+
+    return value_count.head(top_n)

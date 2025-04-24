@@ -69,7 +69,7 @@ class PlotStrategies:
             Minimum number of trading period to be considered for top N computation (Default: 2).
         analysis_cols (list[str]):
             List of columns required for analysis
-            (Default: ["annualized_return", "win_rate", "total_num_trades,
+            (Default: ["annualized_return", "win_rate", "max_days_held",
             "neg_ret_max"]).
         top_n (int):
             Top N ticker pair with highest daily return (Default: 15).
@@ -97,7 +97,7 @@ class PlotStrategies:
             Minimum number of trading period to be considered for top N computation (Default: 2).
         analysis_cols (list[str]):
             List of columns required for analysis
-            (Default: ["annualized_return", "win_rate", "total_num_trades,
+            (Default: ["annualized_return", "win_rate", "max_days_held",
             "neg_ret_max"]).
         top_n (int):
             Top N ticker pair with highest daily return (Default: 15).
@@ -133,7 +133,7 @@ class PlotStrategies:
         analysis_cols: list[str] = [
             "annualized_return",
             "win_rate",
-            "total_num_trades",
+            "max_days_held",
             "highest_neg_percent_return",
         ],
         top_n: int = 15,
@@ -184,13 +184,15 @@ class PlotStrategies:
         # self.gen_top_n_pairs()
 
         # Generate dictionary mapping strat component to mean annual returns
-        ret_df_dict = plot_utils.gen_ret_df_dict(
-            self.combined_path, get_args(StratComponent)
+        stats_df_dict = plot_utils.gen_stats_comp_dict(
+            self.combined_path,
+            get_args(StratComponent),
+            self.analysis_cols,
         )
 
-        # Plot histograms of annualized returns, win rate, number of trades and
-        # highet negative returns for all strategy combinations
-        self.plot_overall()
+        # # Plot histograms of annualized returns, win rate, number of trades and
+        # # highet negative returns for all strategy combinations
+        # self.plot_overall()
 
         # Plot top N tickers with highest daily return overall
         self.plot_top_ticker_pairs()
@@ -199,15 +201,22 @@ class PlotStrategies:
         # and top ticker pairs for each strategy component
         for strat_comp, comp_str in self.drilldown_mapping.items():
             self.plot_comp_hist(strat_comp, comp_str)
-            self.plot_comp_ret(ret_df_dict[strat_comp], strat_comp, comp_str)
             self.plot_comp_ticker_pairs(strat_comp)
+
+            for attribute in self.analysis_cols:
+                self.plot_comp_stats(
+                    stats_df_dict[strat_comp][attribute],
+                    strat_comp,
+                    attribute,
+                    comp_str,
+                )
 
         # Plot bar chart of common occurring ticker pairs among top_N pairs
         self.plot_common()
 
-        # Plot bar chart of common occuring ticker pairs in increasing top N
-        # i.e. start from top 1 till top N
-        self.plot_successive_common()
+        # # Plot bar chart of common occuring ticker pairs in increasing top N
+        # # i.e. start from top 1 till top N
+        # self.plot_successive_common()
 
     def plot_overall(self) -> None:
         """Plot histogram of annualized returns, mean days held, trading period,
@@ -222,7 +231,7 @@ class PlotStrategies:
 
         df = utils.load_csv(self.combined_path, tz="America/New_York")
 
-        _, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 15))
+        _, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 12))
 
         for ax, col in zip(axes.flat, self.analysis_cols):
             sns.histplot(data=df, x=col, ax=ax, kde=True, line_kws={"linewidth": 3})
@@ -269,7 +278,7 @@ class PlotStrategies:
                 f"'{strat_comp}' is not a valid column name in combined DataFrame."
             )
 
-        _, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 15))
+        _, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 12))
 
         for ax, col in zip(axes.flat, self.analysis_cols):
             sns.histplot(
@@ -317,6 +326,16 @@ class PlotStrategies:
         ax.set_ylabel("Daily Returns")
         ax.tick_params(axis="x", rotation=30)
 
+        # Annotate daily returns
+        for bar in ax.patches:
+            ax.annotate(
+                bar.get_height(),
+                (bar.get_x() + bar.get_width() / 2, bar.get_height() * 0.75),
+                ha="center",
+                va="bottom" if bar.get_height() >= 0 else "top",
+                rotation=30,
+            )
+
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
 
@@ -332,15 +351,27 @@ class PlotStrategies:
         df_dict = plot_utils.get_top_pairs_by_comp(
             strat_comp, self.top_n_path, self.top_n, self.disp_cols
         )
-        _, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(20, 15))
+        _, axes = plt.subplots(nrows=nrows, ncols=2, figsize=(20, 12))
 
         for ax, (comp, df) in zip(axes.flat, df_dict.items()):
             sns.barplot(x=df["ticker_pair"], y=df["overall_daily_ret"], ax=ax)
 
-            ax.set_title(f"Top {self.top_n} Ticker Pairs for '{comp}'")
+            comp_str = f"period_{comp}y" if strat_comp == "period" else comp
+
+            ax.set_title(f"Top {self.top_n} Ticker Pairs for '{comp_str}'")
             ax.set_xlabel("Ticker Pair")
             ax.set_ylabel("Daily Returns")
             ax.tick_params(axis="x", rotation=30)
+
+            # Annotate daily returns
+            for bar in ax.patches:
+                ax.annotate(
+                    bar.get_height(),
+                    (bar.get_x() + bar.get_width() / 2, bar.get_height() * 0.75),
+                    ha="center",
+                    va="bottom" if bar.get_height() >= 0 else "top",
+                    rotation=30,
+                )
 
         # Hide unused axes
         plot_utils.hide_unused_ax(axes.flat, list(df_dict.keys()))
@@ -352,10 +383,11 @@ class PlotStrategies:
         plt.savefig(f"{self.graph_date_dir}/top_{self.top_n}_{strat_comp}.png")
         plt.close()
 
-    def plot_comp_ret(
+    def plot_comp_stats(
         self,
         df_ret: pd.DataFrame,
         strat_comp: StratComponent,
+        attribute: str,
         comp_str: str,
     ) -> None:
         """Plot min, max, mean and median annualized returns for each
@@ -367,6 +399,8 @@ class PlotStrategies:
                 for specific strat component.
             strat_comp (StratComponent):
                 Component making up trading strategy.
+            attribute (str):
+                Attributes for statistics generation e.g. 'win_rate'.
             comp_str (str):
                 Formatted strat component string to be used in title.
 
@@ -381,7 +415,7 @@ class PlotStrategies:
 
         # Generate min, max, mean and median annualized return for
         # each strat component
-        _, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 15))
+        _, axes = plt.subplots(nrows=2, ncols=2, figsize=(20, 12))
 
         for ax, stat in zip(axes.flat, df.columns):
             # Sort by stat in descending order
@@ -391,7 +425,7 @@ class PlotStrategies:
 
             # Create color palette for positive and negative returns
             colors = [
-                "red" if ret < 0 else "green" for ret in df_sorted[stat].to_list()
+                "red" if stat < 0 else "green" for stat in df_sorted[stat].to_list()
             ]
 
             # Setting hue is required if using palette
@@ -403,9 +437,12 @@ class PlotStrategies:
                 legend=False,
                 ax=ax,
             )
-            stat_str = stat.title()
 
-            ax.set_title(f"{stat_str} Annualized Returns by {comp_str}")
+            # Formatting for title
+            stat_str = stat.title()
+            attribute_str = " ".join([item.title() for item in attribute.split("_")])
+
+            ax.set_title(f"{stat_str} {attribute_str} by {comp_str}")
             ax.set_xlabel(f"{comp_str}")
             ax.set_ylabel(f"{stat_str} Annualized Returns")
             ax.set_ylim(
@@ -423,7 +460,7 @@ class PlotStrategies:
                 )
 
         plt.tight_layout()
-        plt.savefig(f"{self.graph_date_dir}/{strat_comp}_rets.png")
+        plt.savefig(f"{self.graph_date_dir}/{strat_comp}_{attribute}.png")
         plt.close()
 
     def plot_common(
@@ -459,11 +496,21 @@ class PlotStrategies:
         ax.set_xlabel("Ticker Pair")
         ax.set_ylabel("Counts")
 
+        # Annotate daily returns
+        for bar in ax.patches:
+            ax.annotate(
+                bar.get_height(),
+                (bar.get_x() + bar.get_width() / 2, bar.get_height() * 0.75),
+                ha="center",
+                va="bottom" if bar.get_height() >= 0 else "top",
+                rotation=30,
+            )
+
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
 
         plt.tight_layout()
-        plt.savefig(f"{self.graph_date_dir}/top_n_pairs.png")
+        plt.savefig(f"{self.graph_date_dir}/common_pairs.png")
         plt.close()
 
     def plot_successive_common(

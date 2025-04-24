@@ -1,7 +1,9 @@
 """Helper functions used in 'main.py'"""
 
+from collections import defaultdict
 from decimal import Decimal
 from itertools import product
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -100,80 +102,100 @@ def run_strategies(date: str, snp500_list: list[str], cfg: DictConfig) -> None:
         _, _, _ = cal_pl.run()
 
 
-def gen_stats(
-    combined: pd.DataFrame,
-    strat_comp: str,
-    category: str,
-    analysis_cols=[
-        "annualized_return",
-        "win_rate",
-        "max_days_held",
-        "mean_neg_percent_return",
-        "highest_neg_percent_return",
-    ],
-) -> pd.DataFrame:
-    # Generate Panda Series containing mean value for each analysis column
-    results = combined.loc[:, analysis_cols].mean()
-    results = results.map(lambda val: Decimal(str(round(val, 6))))
-
-    # Convert to DataFrame and transpose
-    df = pd.DataFrame(results).T
-
-    # Append 'strat_comp' and 'comp'
-    df.insert(0, "category", category)
-    df.insert(0, "strat_comp", strat_comp)
-
-    return df
-
-
 def gen_stats_df(
-    df_combined_overall: pd.DataFrame,
-    strat_comp_list: list[str] = [
-        "entry_type",
-        "entry_struct",
-        "exit_struct",
-        "stop_method",
-        "hf_model",
-        "coint_corr_fn",
-        "period",
-    ],
+    combined_path: str,
     analysis_list: list[str] = [
         "annualized_return",
         "win_rate",
         "max_days_held",
-        "mean_neg_percent_return",
         "highest_neg_percent_return",
     ],
 ) -> pd.DataFrame:
     """Generate statistics of combined overall summary for all strategies.
 
     Args:
-        df_combined_overall (pd.DataFrame):
-            DataFrame containing overall summary for all strategies.
+        combined_path (str):
+            Relative path to 'combined_overall.csv' for specific date.
         strat_comp_list (list[str]):
             List of component for strategies
             (Default: ["entry_type", "entry_struct", "exit_struct",
             "stop_method", "hf_model", "coint_corr_fn", "period"]).
+        analysis_list: (list[str]):
+            List of columns for analysis (Default: ["annualized_return",
+            "win_rate", "max_days_held", "highest_neg_percent_return"])
 
     Returns:
         (pd.DataFrame):
             DataFrame containing stats for different strategy components.
     """
 
-    df = df_combined_overall.copy()
+    # Load csv file if exist
+    combined_path = Path(combined_path)
+    date_dir = combined_path.parent
+
+    if not combined_path.is_file():
+        raise FileNotFoundError(
+            f"'combined_overall.csv' is not found at '{combined_path}'."
+        )
+
+    # Filter columns to 'analysis_list'
+    df = utils.load_csv(combined_path, tz="America/New_York")
+    df = df.loc[:, analysis_list]
+
+    # Convert to float type in order for 'pandas.describe'
+    df = df.astype(float)
+    df = df.describe().T
+
+    # Convert float back to Decimal
+    df = df.map(lambda val: Decimal(str(val)).quantize(Decimal("1.000000")))
+
+    # Save DataFrame as csv file
+    utils.save_csv(df, date_dir.joinpath("combined_overall_stats.csv"), save_index=True)
+
+    return df
+
+
+def get_top_pairs_by_entry_type(
+    top_n_path: str,
+    top_n: int = 10,
+    req_cols: list[str] = [
+        "ticker_pair",
+        "overall_daily_ret",
+        "days_held_max",
+        "trading_period",
+        "win_rate",
+        "win_count",
+        "neg_ret_mean",
+        "neg_ret_max",
+    ],
+) -> dict[str, pd.DataFrame]:
+    """Get top N ticker pairs with highest daily return for each category
+    of entry type."""
+
+    # load 'top_15_tickers.csv' if available
+    top_n_path = Path(top_n_path)
+
+    if not top_n_path.is_file():
+        raise FileNotFoundError(
+            f"{top_n_path.name} is not present in '{top_n_path.as_posix()}'."
+        )
+
+    df = utils.load_csv(top_n_path)
     df_list = []
 
-    for strat_comp in strat_comp_list:
-        # Get unique component of strategy component
-        for category in df[strat_comp].unique():
-            df_list.append(
-                gen_stats(
-                    df.loc[df[strat_comp] == category, :],
-                    strat_comp,
-                    category,
-                    analysis_list,
-                )
-            )
+    for category in df["entry_type"].unique():
+        # Filter by category and required columns; sort by overall_daily_ret
+        df_cat = df.loc[df["entry_type"] == category, req_cols]
+        df_cat = df_cat.sort_values(by=["overall_daily_ret"], ascending=False)
 
-    # Concatenate row-wise
+        # Drop duplicates by keeping the highest overall_daily_ret
+        # Get top N ticker pairs with highest overall daily returns
+        df_cat = df_cat.drop_duplicates(subset="ticker_pair").reset_index(drop=True)
+        df_cat = df_cat.head(top_n)
+
+        # Insert "category" column
+        df_cat.insert(0, "category", category)
+
+        df_list.append(df_cat)
+
     return pd.concat(df_list, axis=0).reset_index(drop=True)
