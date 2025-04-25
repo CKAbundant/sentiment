@@ -54,11 +54,11 @@ def main() -> None:
         main_utils.gen_signals(date=date, snp500_list=snp500_list, cfg=cfg)
 
     if cfg.plot_graph:
-        plot_news = PlotNews(path=cfg.path, date=date)
-        plot_news.run()
+        # plot_news = PlotNews(path=cfg.path, date=date)
+        # plot_news.run()
 
-        plot_coint_corr = PlotCointCorr(path=cfg.path, date=date, periods=cfg.periods)
-        plot_coint_corr.run()
+        # plot_coint_corr = PlotCointCorr(path=cfg.path, date=date, periods=cfg.periods)
+        # plot_coint_corr.run()
 
         # Perform analysis on different strategies
         plot_strategies = PlotStrategies(path=cfg.path, date=date, **cfg.plot_strat)

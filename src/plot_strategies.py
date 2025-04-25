@@ -385,7 +385,7 @@ class PlotStrategies:
 
     def plot_comp_stats(
         self,
-        df_ret: pd.DataFrame,
+        df_stats: pd.DataFrame,
         strat_comp: StratComponent,
         attribute: str,
         comp_str: str,
@@ -408,7 +408,7 @@ class PlotStrategies:
             None.
         """
 
-        df = df_ret.copy()
+        df = df_stats.copy()
 
         # Create folder if not exist
         utils.create_folder(self.graph_date_dir)
@@ -428,9 +428,13 @@ class PlotStrategies:
                 "red" if stat < 0 else "green" for stat in df_sorted[stat].to_list()
             ]
 
+            # Ensure category for strat component is set to string to ensure
+            # proper sorting order
+            x_axis = [str(category) for category in df_sorted[strat_comp]]
+
             # Setting hue is required if using palette
             sns.barplot(
-                x=df_sorted[strat_comp],
+                x=x_axis,
                 y=df_sorted[stat],
                 hue=df_sorted[strat_comp],
                 palette=colors,
