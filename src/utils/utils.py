@@ -261,6 +261,13 @@ def save_html(html_content: str, file_name: str, data_dir: str = "./data/html") 
         file.write(html_content)
 
 
+def load_html(file_path: str) -> str:
+    """Load HTML content from html file"""
+
+    with open(file_path, "r") as file:
+        return file.read()
+
+
 def create_folder(data_dir: str | Path) -> None:
     """Create folder if not exist."""
 
