@@ -3,3 +3,4 @@ pycache/
 data/
 *.cache
 .env
+test.ipynb

@@ -113,14 +113,6 @@ class SentiTrades(GenTrades):
         entry_struct: EntryMethod = "multiple",
         exit_struct: ExitMethod = "take_all",
         num_lots: int = 1,
-        req_cols: list[str] = [
-            "date",
-            "high",
-            "low",
-            "close",
-            "entry_signal",
-            "exit_signal",
-        ],
         monitor_close: bool = True,
         percent_loss: float = 0.05,
         stop_method: ExitMethod = "no_stop",
@@ -132,7 +124,6 @@ class SentiTrades(GenTrades):
             entry_struct,
             exit_struct,
             num_lots,
-            req_cols,
             monitor_close,
             entry_struct_path,
             exit_struct_path,
@@ -155,7 +146,7 @@ class SentiTrades(GenTrades):
             df_trades (pd.DataFrame):
                 DataFrame containing completed trades.
             df_signals (pd.DataFrame):
-                DataFrame containing updated exit signals price-related stops.
+                DataFrame containing updated exit signals based on price-related stops.
         """
 
         completed_list = []
@@ -174,16 +165,9 @@ class SentiTrades(GenTrades):
         for idx, dt, high, low, close, ent_sig, ex_sig in df.itertuples(
             index=True, name=None
         ):
-            # print(f"idx : {idx}")
-            # print(f"dt : {dt}")
-            # print(f"close : {close}")
-            # print(f"ent_sig : {ent_sig}")
-            # print(f"ex_sig : {ex_sig}")
-
             # Get net position and whether end of DataFrame
             net_pos = self.get_net_pos()
             is_end = idx >= len(df) - 1
-            # print(f"net_pos : {net_pos}")
 
             # Close off all open positions at end of trading period
             if is_end and net_pos != 0:
@@ -213,10 +197,6 @@ class SentiTrades(GenTrades):
             if ent_sig == "buy" or ent_sig == "sell":
                 self.open_pos(coint_corr_ticker, dt, ent_sig, close)
 
-            # print(f"net_pos after update : {self.get_net_pos()}")
-            # print(f"len(self.open_trades) : {len(self.open_trades)}")
-            # display_open_trades(self.open_trades)
-
         # Convert 'stop_info_list' to DataFrame and append to 'df_senti'
         # 'self.stop_list and 'self.trigger_list' are not empty
         if self.stop_info_list:
@@ -227,85 +207,6 @@ class SentiTrades(GenTrades):
         df_trades.insert(0, "news_ticker", ticker)
 
         return df_trades, df_senti
-
-    def stop_loss(
-        self,
-        dt: datetime,
-        high: float,
-        low: float,
-        close: float,
-    ) -> list[dict[str, Any]]:
-        """Close all open positions if computed stop price is triggered.
-
-        - Stop price is computed via concrete implementation of 'CalExitPrice'.
-
-        Args:
-            dt (datetime):
-                Trade datetime object.
-            high (float):
-                Current day high of cointegrated/correlated stock ticker.
-            low (float):
-                Current day low of cointegrated/correlated stock ticker.
-            close (float):
-                Current day open of cointegrated/correlated stock ticker.
-
-        Returns:
-            completed_trades (list[dict[str, Any]]):
-                List of dictionary containing required fields to generate DataFrame.
-        """
-
-        completed_trades = []
-
-        # Compute stop loss price based on 'self.stop_method'
-        stop_price = self.cal_stop_price()
-        entry_action = get_std_field(self.open_trades, "entry_action")
-        # display_stop_price(
-        #     self.monitor_close, stop_price, entry_action, high, low, close
-        # )
-
-        cond_list = [
-            self.monitor_close and entry_action == "buy" and close < stop_price,
-            self.monitor_close and entry_action == "sell" and close > stop_price,
-            not self.monitor_close and entry_action == "buy" and low < stop_price,
-            not self.monitor_close and entry_action == "sell" and high > stop_price,
-        ]
-
-        # Exit all open positions if any condition in 'cond_list' is true
-        if any(cond_list):
-            exit_action = "sell" if entry_action == "buy" else "buy"
-            # print(f"\nStop triggered -> {exit_action} @ stop price {stop_price}\n")
-
-            completed_trades.extend(self.exit_all(dt, stop_price))
-            self.stop_info_list.append(
-                {"date": dt, "stop_price": stop_price, "triggered": Decimal("1")}
-            )
-
-        else:
-            self.stop_info_list.append(
-                {"date": dt, "stop_price": stop_price, "triggered": Decimal("0")}
-            )
-
-        return completed_trades
-
-    def cal_stop_price(self) -> Decimal:
-        """Compute stop price via concrete implementation of 'CalExitPrice'.
-
-        Args:
-            None.
-
-        Returns:
-            (Decimal): Stop price to monitor.
-        """
-
-        # Name of concrete class implemenation of 'CalExitPrice'
-        class_name = EXIT_PRICE_MAPPING.get(self.stop_method)
-
-        # Get initialized instance of concrete class implementation
-        class_inst = get_class_instance(
-            class_name, self.stop_method_path, percent_loss=self.percent_loss
-        )
-
-        return class_inst.cal_exit_price(self.open_trades)
 
     def get_ticker(self, df_senti: pd.DataFrame, ticker_col: str) -> str:
         """Get news ticker or cointegrated/correlated stock ticker with news ticker.
@@ -342,32 +243,5 @@ class SentiTrades(GenTrades):
                 hour=16, minute=0, tzinfo=ZoneInfo("America/New_York")
             )
         )
-
-        return df
-
-    def append_stop_info(self, df_senti: pd.DataFrame) -> pd.DataFrame:
-        """Append stop info (i.e. stop price and whether triggered) to
-        'df_senti' DataFrame."""
-
-        df = df_senti.copy()
-
-        # Convert 'self.stop_info_list' to DataFrame
-        df_stop = pd.DataFrame(self.stop_info_list)
-
-        # Set time to 0000 hrs for 'dt' column in order to perform join
-        df_stop["date"] = df_stop["date"].map(
-            lambda dt: dt.replace(hour=0, minute=0, tzinfo=None)
-        )
-        df_stop = df_stop.set_index("date")
-
-        # Set 'date' column as index
-        if "date" not in df.columns:
-            raise ValueError("'date' column is not found.")
-
-        df["date"] = pd.to_datetime(df["date"])
-        df = df.set_index("date")
-
-        # Perform join via index
-        df = df.join(df_stop)
 
         return df
