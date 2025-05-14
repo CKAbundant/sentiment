@@ -5,6 +5,8 @@ import importlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Type, TypeVar
 
+from src.strategy.base import TakeAllExit
+
 if TYPE_CHECKING:
     from src.strategy.base.stock_trade import StockTrade
 
@@ -75,11 +77,11 @@ def exit_all(
     open_trades: list["StockTrade"],
     dt: datetime,
     exit_price: float,
-    exit_struct_path: str,
 ) -> list[dict[str, Any]]:
     """Close all open positions via 'TakeAllExit.close_pos' method.
 
     Args:
+        open
         dt (datetime):
             Trade datetime object.
         exit_price (float):
@@ -91,7 +93,7 @@ def exit_all(
     """
 
     # Get initialized instance of concrete class implementation
-    take_all_exit = get_class_instance("TakeAllExit", exit_struct_path)
+    take_all_exit = TakeAllExit()
 
     # Update open trades and generate completed trades
     open_trades, completed_trades = take_all_exit.close_pos(open_trades, dt, exit_price)

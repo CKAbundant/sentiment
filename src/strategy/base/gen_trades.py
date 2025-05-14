@@ -459,7 +459,6 @@ class CheckProfit:
         >>> completed_list = check_profit(completed_list, open_trades, record, net_pos)
 
     Args:
-        entry_price (float)
         trigger_trail (float):
             Percentage profit required to trigger trailing profit. E.g. if long at 100,
             and trigger_trail = 0.1, stock needs to hit 110 before trailing stop set
@@ -497,7 +496,7 @@ class CheckProfit:
             completed_trades (list[dict[str, Any]]):
                 List of dictionary containing required fields to generate DataFrame.
             open_trades (list[StockTrade]):
-                List of 'StockTrade' pydantic objects representing open positions
+                List of 'StockTrade' pydantic objects representing open positions.
             record (dict[str, float | datetime]):
                 Dictionary mapping required attributes to its values.
 
@@ -507,17 +506,20 @@ class CheckProfit:
         """
 
         # Get updated net position
-        net_pos = get_net_pos(self.open_trades)
+        if (net_pos := strategy_utils.get_net_pos(open_trades)) == 0:
+            return []
 
         ent_sig = record["entry_signal"]
         ex_sig = record["exit_signal"]
         dt = record["date"]
+        high = record["high"]
+        low = record["low"]
         close = record["close"]
 
-        if (ex_sig == "sell" or ex_sig == "buy") and net_pos != 0:
-            # Get standard 'entry_action' from 'self.open_trades'
-            entry_action = get_std_field(self.open_trades, "entry_action")
+        # Get standard 'entry_action' from 'self.open_trades'
+        entry_action = get_std_field(self.open_trades, "entry_action")
 
+        if ex_sig == "sell" or ex_sig == "buy":
             # Exit all open position in order to flip position
             # If entry_action == 'buy', then ex_sig must be 'sell'
             # ex_sig != entry_action
@@ -527,5 +529,38 @@ class CheckProfit:
                 completed_list.extend(self.take_profit(dt, ex_sig, close))
 
         else:
-            # Check for trailing profit
-            pass
+            # Get trigger trail level from entry price of first position
+            first_entry = open_trades[0].entry_price
+            trigger_trail_level = first_entry * self.trigger_trail
+            step_level = first_entry * self.step if self.step is not None else None
+
+            if self.trailing_level is None:
+                # Compute trailing level
+                if entry_action == "buy":
+                    excess = high - trigger_trail_level
+
+                    if excess >= 0:
+                        self.trailing_level = (
+                            first_entry + excess
+                            if self.step is None
+                            else first_entry + (excess // step_level) * step_level
+                        )
+
+                elif entry_action == "sell":
+                    excess = trigger_trail_level - low
+
+                    if excess >= 0:
+                        self.trailing_level = (
+                            first_entry - excess
+                            if self.step is None
+                            else first_entry - (excess // step_level) * step_level
+                        )
+
+            if self.trailing_level and (
+                (high >= self.trailing_level and entry_action == "buy")
+                or (low <= self.trailing_level and entry_action == "sell")
+            ):
+                # Trailing profit price triggered
+                completed_list.extend(strategy_utils.exit_all(open_trades, dt, close))
+
+        return completed_list
