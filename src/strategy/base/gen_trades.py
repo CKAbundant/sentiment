@@ -15,6 +15,7 @@ from config.variables import (
     ExitMethod,
     PriceAction,
 )
+from src.utils import strategy_utils
 from src.utils.utils import get_class_instance, get_std_field
 
 from .stock_trade import StockTrade
@@ -138,18 +139,23 @@ class GenTrades(ABC):
 
         completed_list = []
 
-        for idx, dt, high, low, close, ent_sig, ex_sig in df.itertuples(
-            index=True, name=None
-        ):
+        # for idx, dt, high, low, close, ent_sig, ex_sig in df.itertuples(
+        #     index=True, name=None
+        # ):
+        for idx, record in df.itertuples(index=True, name=None):
+            # Create mapping for attribute to its values
+            info = {attr: val for attr, val in zip(self.req_cols, record)}
+
             # Get net position and whether end of DataFrame
-            net_pos = self.get_net_pos()
+            net_pos = strategy_utils.get_net_pos(self.open_trades)
             is_end = idx >= len(df) - 1
 
             # Close off all open positions at end of trading period
+            # Skip creating new open positions after all open positions closed
             if is_end and net_pos != 0:
-                completed_list.extend(self.exit_all(dt, close))
-
-                # Skip creating new open positions after all open positions closed
+                completed_list.extend(
+                    strategy_utils.exit_all(info["date"], info["close"])
+                )
                 continue
 
             # Check to cut loss for all open position
@@ -157,7 +163,9 @@ class GenTrades(ABC):
                 completed_list.extend(self.stop_loss(dt, high, low, close))
 
             # Check to take profit
-            if (ex_sig == "sell" or ex_sig == "buy") and net_pos != 0:
+            if (ex_sig == "sell" or ex_sig == "buy") and get_net_pos(
+                self.open_trades
+            ) != 0:
                 # Get standard 'entry_action' from 'self.open_trades'
                 entry_action = get_std_field(self.open_trades, "entry_action")
 
@@ -165,7 +173,7 @@ class GenTrades(ABC):
                 # If entry_action == 'buy', then ex_sig must be 'sell'
                 # ex_sig != entry_action
                 if ex_sig == ent_sig and ex_sig != entry_action:
-                    completed_list.extend(self.exit_all(dt, close))
+                    completed_list.extend(strategy_utils.exit_all(dt, close))
                 else:
                     completed_list.extend(self.take_profit(dt, ex_sig, close))
 
@@ -182,6 +190,48 @@ class GenTrades(ABC):
         df_trades = pd.DataFrame(completed_list)
 
         return df_trades, df_signals
+
+    def check_profit(
+        self,
+        completed_list: list[dict[str, Any]],
+        record: dict[str, float | datetime],
+        open_trades: list["StockTrade"],
+    ) -> list[dict[str, Any]]:
+        """check whether take profit condition is met and update completed_list.
+
+        Args:
+            completed_trades (list[dict[str, Any]]):
+                List of dictionary containing required fields to generate DataFrame.
+            record (dict[str, float | datetime]):
+                Dictionary mapping required attributes to its values.
+            net_pos (int):
+                Net open position (Negative => open short positions).
+
+        Returns:
+            completed_trades (list[dict[str, Any]]):
+                List of dictionary containing required fields to generate DataFrame.
+        """
+
+        ent_sig = record["entry_signal"]
+        ex_sig = record["exit_signal"]
+        dt = record["date"]
+        close = record["close"]
+
+        if (ex_sig == "sell" or ex_sig == "buy") and net_pos != 0:
+            # Get standard 'entry_action' from 'self.open_trades'
+            entry_action = get_std_field(self.open_trades, "entry_action")
+
+            # Exit all open position in order to flip position
+            # If entry_action == 'buy', then ex_sig must be 'sell'
+            # ex_sig != entry_action
+            if ex_sig == ent_sig and ex_sig != entry_action:
+                completed_list.extend(strategy_utils.exit_all(dt, close))
+            else:
+                completed_list.extend(self.take_profit(dt, ex_sig, close))
+
+        else:
+            # Check for trailing profit
+            pass
 
     def open_pos(
         self,
@@ -310,7 +360,7 @@ class GenTrades(ABC):
             # exit_action = "sell" if entry_action == "buy" else "buy"
             # print(f"\nStop triggered -> {exit_action} @ stop price {stop_price}\n")
 
-            completed_trades.extend(self.exit_all(dt, stop_price))
+            completed_trades.extend(exit_all(dt, stop_price))
             self.stop_info_list.append(
                 {"date": dt, "stop_price": stop_price, "triggered": Decimal("1")}
             )
@@ -322,33 +372,33 @@ class GenTrades(ABC):
 
         return completed_trades
 
-    def exit_all(
-        self,
-        dt: datetime,
-        exit_price: float,
-    ) -> list[dict[str, Any]]:
-        """Close all open positions via 'TakeAllExit.close_pos' method.
+    # def exit_all(
+    #     self,
+    #     dt: datetime,
+    #     exit_price: float,
+    # ) -> list[dict[str, Any]]:
+    #     """Close all open positions via 'TakeAllExit.close_pos' method.
 
-        Args:
-            dt (datetime):
-                Trade datetime object.
-            exit_price (float):
-                Exit price of stock ticker.
+    #     Args:
+    #         dt (datetime):
+    #             Trade datetime object.
+    #         exit_price (float):
+    #             Exit price of stock ticker.
 
-        Returns:
-            completed_trades (list[dict[str, Any]]):
-                List of dictionary containing required fields to generate DataFrame.
-        """
+    #     Returns:
+    #         completed_trades (list[dict[str, Any]]):
+    #             List of dictionary containing required fields to generate DataFrame.
+    #     """
 
-        # Get initialized instance of concrete class implementation
-        take_all_exit = get_class_instance("TakeAllExit", self.exit_struct_path)
+    #     # Get initialized instance of concrete class implementation
+    #     take_all_exit = get_class_instance("TakeAllExit", self.exit_struct_path)
 
-        # Update open trades and generate completed trades
-        self.open_trades, completed_trades = take_all_exit.close_pos(
-            self.open_trades, dt, exit_price
-        )
+    #     # Update open trades and generate completed trades
+    #     self.open_trades, completed_trades = take_all_exit.close_pos(
+    #         self.open_trades, dt, exit_price
+    #     )
 
-        return completed_trades
+    #     return completed_trades
 
     def cal_stop_price(self) -> Decimal:
         """Compute stop price via concrete implementation of 'CalExitPrice'.
@@ -397,14 +447,85 @@ class GenTrades(ABC):
 
         return df
 
-    def get_net_pos(self) -> int:
-        """Get net positions from 'self.open_trades'."""
 
-        return sum(
-            (
-                trade.entry_lots - trade.exit_lots
-                if trade.entry_action == "buy"
-                else -(trade.entry_lots - trade.exit_lots)
-            )
-            for trade in self.open_trades
-        )
+class CheckProfit:
+    """Check if profit conditions are met.
+
+    - Flip position if long and short positions allowed.
+    - Trailing profit is computed for the intiial open position.
+
+    Usage:
+        >>> check_profit = CheckProfit()
+        >>> completed_list = check_profit(completed_list, open_trades, record, net_pos)
+
+    Args:
+        entry_price (float)
+        trigger_trail (float):
+            Percentage profit required to trigger trailing profit. E.g. if long at 100,
+            and trigger_trail = 0.1, stock needs to hit 110 before trailing stop set
+            at 100 (Default: 0.2).
+        step (float):
+            Percent profit increment to trail profit. If None, increment set to
+            current high - trigger_trail_level (Default: 0.05).
+
+    Attributes:
+        step (float):
+            Percent profit increment to trail profit. If None, increment set to
+            current high - trigger_trail_level (Default: 0.05).
+        trigger_trail_level (float):
+            Actual price required to trigger trailing profit. Calculated from
+            'trigger_trail'.
+        trailing_level (float):
+            Trailing profit price level. If triggered, all open positions will be closed.
+    """
+
+    def __init__(self, trigger_trail: float = 0.2, step: float = 0.05) -> None:
+        self.trigger_trail = trigger_trail
+        self.step = step
+        self.trigger_trail_level = None
+        self.trailing_level = None
+
+    def __call__(
+        self,
+        completed_list: list[dict[str, Any]],
+        open_trades: list["StockTrade"],
+        record: dict[str, float | datetime],
+    ) -> list[dict[str, Any]]:
+        """Check if profit conditions are met and return 'completed_list'.
+
+        Args:
+            completed_trades (list[dict[str, Any]]):
+                List of dictionary containing required fields to generate DataFrame.
+            open_trades (list[StockTrade]):
+                List of 'StockTrade' pydantic objects representing open positions
+            record (dict[str, float | datetime]):
+                Dictionary mapping required attributes to its values.
+
+        Returns:
+            completed_trades (list[dict[str, Any]]):
+                List of dictionary containing required fields to generate DataFrame.
+        """
+
+        # Get updated net position
+        net_pos = get_net_pos(self.open_trades)
+
+        ent_sig = record["entry_signal"]
+        ex_sig = record["exit_signal"]
+        dt = record["date"]
+        close = record["close"]
+
+        if (ex_sig == "sell" or ex_sig == "buy") and net_pos != 0:
+            # Get standard 'entry_action' from 'self.open_trades'
+            entry_action = get_std_field(self.open_trades, "entry_action")
+
+            # Exit all open position in order to flip position
+            # If entry_action == 'buy', then ex_sig must be 'sell'
+            # ex_sig != entry_action
+            if ex_sig == ent_sig and ex_sig != entry_action:
+                completed_list.extend(self.exit_all(dt, close))
+            else:
+                completed_list.extend(self.take_profit(dt, ex_sig, close))
+
+        else:
+            # Check for trailing profit
+            pass

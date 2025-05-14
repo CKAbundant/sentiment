@@ -1,26 +1,22 @@
 """Generic helper functions"""
 
 import calendar
-import importlib
 import pickle
 import random
 from collections import Counter, deque
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Type, TypeVar, get_args, get_origin
+from typing import TYPE_CHECKING, Any, Literal, get_args, get_origin
+
+if TYPE_CHECKING:
+    from src.strategy.base.stock_trade import StockTrade
 
 import numpy as np
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 
 from config.variables import PriceAction
-
-if TYPE_CHECKING:
-    from src.strategy.base.stock_trade import StockTrade
-
-# Create generic type variable 'T'
-T = TypeVar("T")
 
 
 def load_config(cfg_path: str = "./config/config.yaml") -> DictConfig | None:
@@ -35,54 +31,6 @@ def load_config(cfg_path: str = "./config/config.yaml") -> DictConfig | None:
 
     except ValueError as e:
         print(f"Unable to load 'config.yaml' : {e}")
-
-
-def get_class_instance(
-    class_name: str, script_path: str, **params: dict[str, Any]
-) -> T:
-    """Return instance of a class that is initialized with 'params'.
-
-    Args:
-        class_name (str):
-            Name of class in python script.
-        script_path (str):
-            Relative file path to python script that contains the required class.
-        **params (dict[str, Any]):
-            Arbitrary Keyword input arguments to initialize class instance.
-
-    Returns:
-        (T): Initialized instance of class.
-
-
-    """
-
-    # Convert script path to package path
-    module_path = convert_path_to_pkg(script_path)
-
-    try:
-        # Import python script at class path as python module
-        module = importlib.import_module(module_path)
-    except ModuleNotFoundError as e:
-        raise ModuleNotFoundError(f"Module not found in '{script_path}' : {e}")
-
-    try:
-        # Get class from module
-        req_class: Type[T] = getattr(module, class_name)
-    except AttributeError as e:
-        raise AttributeError(f"'{class_name}' class is not found in module.")
-
-    # Intialize instance of class
-    return req_class(**params)
-
-
-def convert_path_to_pkg(script_path: str) -> str:
-    """Convert file path to package path that can be used as input to importlib."""
-
-    # Remove suffix ".py"
-    script_path = Path(script_path).with_suffix("").as_posix()
-
-    # Convert to package format for use in 'importlib.import_module'
-    return script_path.replace("/", ".")
 
 
 def get_current_dt(fmt: str = "%Y%m%d_%H%M") -> str:

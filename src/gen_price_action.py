@@ -43,7 +43,7 @@ from config.variables import (
 )
 from src.cal_coint_corr import CalCointCorr
 from src.strategy.base import GenTrades, TradingStrategy
-from src.utils import utils
+from src.utils import strategy_utils, utils
 
 
 class GenPriceAction:
@@ -383,19 +383,19 @@ class GenPriceAction:
 
         # Get instance of concrete implementation of 'EntrySignal' abstract class
         class_name = SIGNAL_MAPPING.get(self.entry_signal)
-        entry_inst = utils.get_class_instance(
+        entry_inst = strategy_utils.get_class_instance(
             class_name, self.path.entry_signal_path, entry_type=self.entry_type
         )
 
         # Get instance of concrete implementation of 'ExitSignal' abstract class
         class_name = SIGNAL_MAPPING.get(self.exit_signal)
-        exit_inst = utils.get_class_instance(
+        exit_inst = strategy_utils.get_class_instance(
             class_name, self.path.exit_signal_path, entry_type=self.entry_type
         )
 
         # Get instance of concrete implementation of 'GenTrades' abstract class
         class_name = TRADES_MAPPING.get(self.trades_method)
-        trades_inst = utils.get_class_instance(
+        trades_inst = strategy_utils.get_class_instance(
             class_name,
             self.path.trades_path,
             entry_struct=self.entry_struct,
