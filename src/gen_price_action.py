@@ -30,10 +30,6 @@ from omegaconf import DictConfig
 from tqdm import tqdm
 
 from config.variables import (
-    EXIT_PRICE_MAPPING,
-    SIGNAL_MAPPING,
-    STRUCT_MAPPING,
-    TRADES_MAPPING,
     CointCorrFn,
     EntryMethod,
     EntryType,
@@ -382,21 +378,18 @@ class GenPriceAction:
         'stop_method', 'hf_model', 'coint_corr_fn' and 'period'."""
 
         # Get instance of concrete implementation of 'EntrySignal' abstract class
-        class_name = SIGNAL_MAPPING.get(self.entry_signal)
         entry_inst = strategy_utils.get_class_instance(
-            class_name, self.path.entry_signal_path, entry_type=self.entry_type
+            self.entry_signal, self.path.entry_signal_path, entry_type=self.entry_type
         )
 
         # Get instance of concrete implementation of 'ExitSignal' abstract class
-        class_name = SIGNAL_MAPPING.get(self.exit_signal)
         exit_inst = strategy_utils.get_class_instance(
-            class_name, self.path.exit_signal_path, entry_type=self.entry_type
+            self.exit_signal, self.path.exit_signal_path, entry_type=self.entry_type
         )
 
         # Get instance of concrete implementation of 'GenTrades' abstract class
-        class_name = TRADES_MAPPING.get(self.trades_method)
         trades_inst = strategy_utils.get_class_instance(
-            class_name,
+            self.trades_method,
             self.path.trades_path,
             entry_struct=self.entry_struct,
             exit_struct=self.exit_struct,

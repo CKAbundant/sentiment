@@ -7,7 +7,7 @@ from collections import Counter, deque
 from decimal import Decimal
 
 from src.strategy.base.stock_trade import StockTrade
-from src.utils.utils import get_std_field
+from src.utils.strategy_utils import get_std_field
 
 
 class CalExitPrice(ABC):

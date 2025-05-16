@@ -1,14 +1,14 @@
-date: "2025-04-01"
-download_ohlcv: false
+date: null # "2025-04-01"
+download_ohlcv: true
 cal_coint_corr: false
 sentiment: false
 test_all: null # true, false, null
-plot_graph: true
+plot_graph: false
 
 # Entry, exit and trades generation
-entry_signal: "senti_entry"
-exit_signal: "senti_exit"
-trades_method: "senti_trades"
+entry_signal: "SentiEntry"
+exit_signal: "SentiExit"
+trades_method: "SentiTrades"
 
 # Sentiment analysis
 news_ticker_list:
@@ -125,13 +125,6 @@ std:
   exit_signal: "${exit_signal}"
   trades_method: "${trades_method}"
   num_lots: 10
-  req_cols:
-    - "date"
-    - "high"
-    - "low"
-    - "close"
-    - "entry_signal"
-    - "exit_signal"
   monitor_close: true
   percent_loss: 0.05
   top_n: 10

@@ -10,7 +10,7 @@ from decimal import Decimal
 from pydantic import ValidationError
 
 from config.variables import PriceAction
-from src.utils.utils import get_std_field
+from src.utils.strategy_utils import get_std_field
 
 from .stock_trade import StockTrade
 

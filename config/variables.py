@@ -1,6 +1,6 @@
 """Variables and Literal used for this repo."""
 
-from typing import Literal, get_args
+from typing import Literal
 
 # Analysis
 HfModel = Literal["prosusai", "yiyanghkust", "ziweichen", "aventiq_ai"]
@@ -29,30 +29,3 @@ StopMethod = Literal[
     "latest_loss",
     "nearest_loss",
 ]
-
-# Mapping
-SIGNAL_MAPPING = {
-    "senti_entry": "SentiEntry",
-    "senti_exit": "SentiExit",
-    "senti_trades": "SentiTrades",
-}
-
-TRADES_MAPPING = {
-    "senti_trades": "SentiTrades",
-}
-
-STRUCT_MAPPING = {
-    "multiple": "MultiEntry",
-    "multiple_half": "MultiHalfEntry",
-    "single": "SingleEntry",
-    "fifo": "FIFOExit",
-    "lifo": "LIFOExit",
-    "half_fifo": "HalfFIFOExit",
-    "half_lifo": "HalfLIFOExit",
-    "take_all": "TakeAllExit",
-}
-
-EXIT_PRICE_MAPPING = {
-    method: "".join([meth.title() for meth in method.split("_")])
-    for method in get_args(StopMethod)
-}

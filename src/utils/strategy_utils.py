@@ -1,11 +1,9 @@
 """Helper functions for strategy implementation"""
 
-import datetime
 import importlib
+from collections import Counter, deque
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Type, TypeVar
-
-from src.strategy.base import TakeAllExit
 
 if TYPE_CHECKING:
     from src.strategy.base.stock_trade import StockTrade
@@ -73,29 +71,12 @@ def get_net_pos(open_trades: list["StockTrade"]) -> int:
     )
 
 
-def exit_all(
-    open_trades: list["StockTrade"],
-    dt: datetime,
-    exit_price: float,
-) -> list[dict[str, Any]]:
-    """Close all open positions via 'TakeAllExit.close_pos' method.
+def get_std_field(open_trades: deque["StockTrade"], std_field: str) -> str:
+    """Get standard field (i.e. 'ticker' or 'entry_action') from 'open_trades'."""
 
-    Args:
-        open
-        dt (datetime):
-            Trade datetime object.
-        exit_price (float):
-            Exit price of stock ticker.
+    counter = Counter([getattr(trade, std_field) for trade in open_trades])
 
-    Returns:
-        completed_trades (list[dict[str, Any]]):
-            List of dictionary containing required fields to generate DataFrame.
-    """
+    if len(counter) > 1:
+        raise ValueError(f"'{std_field}' field is not consistent.")
 
-    # Get initialized instance of concrete class implementation
-    take_all_exit = TakeAllExit()
-
-    # Update open trades and generate completed trades
-    open_trades, completed_trades = take_all_exit.close_pos(open_trades, dt, exit_price)
-
-    return completed_trades
+    return "wait" if len(counter) == 0 else list(counter.keys())[0]

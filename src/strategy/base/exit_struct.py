@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from config.variables import EXIT_PRICE_MAPPING, ExitMethod, PriceAction
+from config.variables import ExitMethod, PriceAction
 
 from .stock_trade import StockTrade
 
@@ -498,9 +498,11 @@ class TakeAllExit(ExitStruct):
                 if self._validate_completed_trades(trade):
                     completed_trades.append(trade.model_dump())
 
+        if len(completed_trades) != len(open_trades):
+            raise ValueError(f"Open positions failed to close completely.")
+
         # Reset open_trades
-        if len(completed_trades) == len(open_trades):
-            open_trades.clear()
+        open_trades.clear()
 
         return open_trades, completed_trades
 

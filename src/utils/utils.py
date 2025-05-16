@@ -444,14 +444,3 @@ def get_last_day_of_month(dt: datetime) -> datetime:
     last_date = datetime(dt.year, dt.month, last_day)
 
     return last_date
-
-
-def get_std_field(open_trades: deque["StockTrade"], std_field: str) -> str:
-    """Get standard field (i.e. 'ticker' or 'entry_action') from 'open_trades'."""
-
-    counter = Counter([getattr(trade, std_field) for trade in open_trades])
-
-    if len(counter) > 1:
-        raise ValueError(f"'{std_field}' field is not consistent.")
-
-    return "wait" if len(counter) == 0 else list(counter.keys())[0]

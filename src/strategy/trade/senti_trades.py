@@ -38,14 +38,10 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from config.variables import EXIT_PRICE_MAPPING, EntryMethod, ExitMethod, PriceAction
+from config.variables import EntryMethod, ExitMethod, PriceAction
 from src.strategy.base import GenTrades
-from src.utils.utils import (
-    display_open_trades,
-    display_stop_price,
-    get_class_instance,
-    get_std_field,
-)
+from src.utils.strategy_utils import get_std_field
+from src.utils.utils import display_open_trades, display_stop_price, get_class_instance
 
 
 class SentiTrades(GenTrades):
@@ -56,7 +52,7 @@ class SentiTrades(GenTrades):
     - Perform sell on cointegrated/correlated ticker if median rating <= 2.
 
     Usage:
-        # df = DataFrame containg sentiment rating and OHLCV prices
+        # df = DataFrame containing sentiment rating and OHLCV prices
         >>> trades = SentiTrades()
         >>> df_results = trades.gen_trades(df)
 
@@ -70,9 +66,6 @@ class SentiTrades(GenTrades):
             take profit for all open positions ("take_all").
         num_lots (int):
             Number of lots to initiate new position each time (Default: 1).
-        req_cols (list[str]):
-            List of required columns to generate trades
-            (Default: ["date", "high", "low", "close", "entry_signal", "exit_signal"]).
         monitor_close (bool):
             Whether to monitor close price ("close") or both high and low price
             (Default: True).
@@ -149,12 +142,6 @@ class SentiTrades(GenTrades):
                 DataFrame containing updated exit signals based on price-related stops.
         """
 
-        completed_list = []
-
-        # Filter out null values for OHLC due to weekends and holiday
-        df = df_senti.copy()
-        df = df.loc[:, self.req_cols]
-
         # Assume positions are opened or closed at market closing (1600 hrs New York)
         df = self.set_mkt_cls_dt(df)
 
@@ -162,48 +149,8 @@ class SentiTrades(GenTrades):
         ticker = self.get_ticker(df_senti, "ticker")
         coint_corr_ticker = self.get_ticker(df_senti, "coint_corr_ticker")
 
-        for idx, dt, high, low, close, ent_sig, ex_sig in df.itertuples(
-            index=True, name=None
-        ):
-            # Get net position and whether end of DataFrame
-            net_pos = self.get_net_pos()
-            is_end = idx >= len(df) - 1
-
-            # Close off all open positions at end of trading period
-            if is_end and net_pos != 0:
-                completed_list.extend(self.exit_all(dt, close))
-
-                # Skip creating new open positions after all open positions closed
-                continue
-
-            # Check to cut loss for all open position
-            if net_pos != 0 and self.stop_method != "no_stop":
-                completed_list.extend(self.stop_loss(dt, high, low, close))
-
-            # Check to take profit
-            if (ex_sig == "sell" or ex_sig == "buy") and net_pos != 0:
-                # Get standard 'entry_action' from 'self.open_trades'
-                entry_action = get_std_field(self.open_trades, "entry_action")
-
-                # Exit all open position in order to flip position
-                # If entry_action == 'buy', then ex_sig must be 'sell'
-                # ex_sig != entry_action
-                if ex_sig == ent_sig and ex_sig != entry_action:
-                    completed_list.extend(self.exit_all(dt, close))
-                else:
-                    completed_list.extend(self.take_profit(dt, ex_sig, close))
-
-            # Check to enter new position
-            if ent_sig == "buy" or ent_sig == "sell":
-                self.open_pos(coint_corr_ticker, dt, ent_sig, close)
-
-        # Convert 'stop_info_list' to DataFrame and append to 'df_senti'
-        # 'self.stop_list and 'self.trigger_list' are not empty
-        if self.stop_info_list:
-            df_senti = self.append_stop_info(df_senti)
-
-        # Append 'news_ticker' column to DataFrame generated from completed trades
-        df_trades = pd.DataFrame(completed_list)
+        # Generate completed trades and updated signal DataFrame
+        df_trades, df_senti = self.iterate_df(coint_corr_ticker, df_senti)
         df_trades.insert(0, "news_ticker", ticker)
 
         return df_trades, df_senti

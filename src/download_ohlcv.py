@@ -118,7 +118,7 @@ class DownloadOHLCV:
 
         self.session = CachedLimiterSession(
             limiter=Limiter(
-                RequestRate(1, Duration.SECOND * 10)
+                RequestRate(1, Duration.SECOND * 30)
             ),  # max 1 requests per 10 seconds
             bucket_class=MemoryQueueBucket,
             backend=SQLiteCache("yfinance.cache"),
