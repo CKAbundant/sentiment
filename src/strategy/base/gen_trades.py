@@ -488,7 +488,7 @@ class GenTrades(ABC):
                 else first_price + (excess // step_level) * step_level
             )
 
-            if computed_trailing > self.trailing_profit:
+            if self.trailing_profit is None or computed_trailing > self.trailing_profit:
                 # Update trailing profit level if higher than previous level
                 self.trailing_profit = computed_trailing
 
@@ -500,7 +500,7 @@ class GenTrades(ABC):
                 else first_price - (excess // step_level * step_level)
             )
 
-            if computed_trailing < self.trailing_profit:
+            if self.trailing_profit is None or computed_trailing < self.trailing_profit:
                 # Update trailing profit level if lower than previous level
                 self.trailing_profit = computed_trailing
 
@@ -508,6 +508,9 @@ class GenTrades(ABC):
         """Compute price level to activate trailing profit."""
 
         if len(self.open_trades) == 0 or self.trigger_trail is None:
+            self.trigger_trail_level = None
+            self.trailing_profit = None
+
             return
 
         # Get standard 'entry_action' from 'self.open_trades' and first entry price
@@ -590,7 +593,7 @@ class GenTrades(ABC):
         if len(self.open_trades) != 0:
             raise ValueError("Open positions are not closed completely.")
 
-        # Reset trigger trail level
+        # Reset trigger trail level and trailing profit
         self.trigger_trail_level = None
         self.trailing_profit = None
 
