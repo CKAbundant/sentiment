@@ -1,14 +1,33 @@
-date: null # "2025-04-01"
-download_ohlcv: true
+date: "2025-04-01" # "2025-04-01", null
+download_ohlcv: false
 cal_coint_corr: false
 sentiment: false
-test_all: null # true, false, null
+test_all: false # true, false, null
 plot_graph: false
 
-# Entry, exit and trades generation
-entry_signal: "SentiEntry"
-exit_signal: "SentiExit"
-trades_method: "SentiTrades"
+# Standard parameters to initialize 'GenPriceAction'
+std: &std
+  path: "${path}"
+  entry_signal: "SentiEntry"
+  exit_signal: "SentiExit"
+  trades_method: "SentiTrades"
+  num_lots: 10
+  monitor_close: true
+  percent_loss: 0.05
+  trigger_trail: 0.05 # null
+  step: null
+  top_n: 10
+
+# Run single test
+single:
+  entry_type: "long" # short, longshort
+  entry_struct: "MultiEntry" # "MultiHalfEntry", "SingleEntry"
+  exit_struct: "TakeAllExit" # "FIFOExit", "LIFOExit", "HalfFIFOExit", "HalfLIFOExit"
+  stop_method: "no_stop" # "no_stop", "PercentLoss", "LatestLoss", "NearestLoss"
+  hf_model: "ziweichen" # prosusai, ziweichen, yiyanghkust, aventiq_ai
+  coint_corr_fn: "coint" # pearsonr, spearmanr, kendalltau, coint
+  period: 5
+  <<: *std
 
 # Sentiment analysis
 news_ticker_list:
@@ -111,40 +130,19 @@ path:
   strategy_dir: "src/strategy"
 
   # file path
-  entry_signal_path: "${path.strategy_dir}/entry/${entry_signal}.py"
-  exit_signal_path: "${path.strategy_dir}/exit/${exit_signal}.py"
-  trades_path: "${path.strategy_dir}/trade/${trades_method}.py"
+  entry_signal_path: "${path.strategy_dir}/entry/senti_entry.py"
+  exit_signal_path: "${path.strategy_dir}/exit/senti_exit.py"
+  trades_path: "${path.strategy_dir}/trade/senti_trades.py"
   entry_struct_path: "${path.strategy_dir}/base/entry_struct.py"
   exit_struct_path: "${path.strategy_dir}/base/exit_struct.py"
   stop_method_path: "${path.strategy_dir}/base/cal_exit_price.py"
 
-# Standard parameters to initialize 'GenPriceAction'
-std:
-  path: "${path}"
-  entry_signal: "${entry_signal}"
-  exit_signal: "${exit_signal}"
-  trades_method: "${trades_method}"
-  num_lots: 10
-  monitor_close: true
-  percent_loss: 0.05
-  top_n: 10
-
-# Run single test
-single:
-  entry_type: "long" # long, short, longshort
-  entry_struct: "multiple" # multiple, multiple_half, single
-  exit_struct: "take_all" # fifo, lifo, half_fifo, half_lifo, take_all
-  stop_method: "no_stop" # percent_loss, nearest_loss, latest_loss
-  hf_model: "prosusai" # prosusai, ziweichen, yiyanghkust, aventiq_ai
-  coint_corr_fn: "kendalltau" # pearsonr, spearmanr, kendalltau, conint
-  period: 5
-
 # Run full test
 stop:
   - "no_stop"
-  - "percent_loss"
-  - "nearest_loss"
-  - "latest_loss"
+  - "PercentLoss"
+  - "NearestLoss"
+  - "LatestLoss"
 hf_model:
   - "prosusai"
   - "yiyanghkust"
@@ -164,13 +162,13 @@ full:
   # long and short strategy (excluding single entry)
   - - - "long"
       - "short"
-    - - "multiple"
-      - "multiple_half"
-    - - "fifo"
-      - "lifo"
-      - "half_fifo"
-      - "half_lifo"
-      - "take_all"
+    - - "MultiEntry"
+      - "MultiHalfEntry"
+    - - "FIFOExit"
+      - "LIFOExit"
+      - "HalfFIFOExit"
+      - "HalfLIFOExit"
+      - "TakeAllExit"
     - "${stop}"
     - "${hf_model}"
     - "${coint_corr_fn}"
@@ -179,8 +177,8 @@ full:
   # single entry for long and short strategy
   - - - "long"
       - "short"
-    - - "single"
-    - - "fifo"
+    - - "SingleEntry"
+    - - "FIFOExit"
       - "half_fifo"
     - "${stop}"
     - "${hf_model}"
@@ -189,10 +187,10 @@ full:
     
   # long-short strategy
   - - - "longshort"
-    - - "multiple"
-      - "multiple_half"
-      - "single"
-    - - "take_all"
+    - - "MultiEntry"
+      - "MultiHalfEntry"
+      - "SingleEntry"
+    - - "TakeAllExit"
     - "${stop}"
     - "${hf_model}"
     - "${coint_corr_fn}"

@@ -91,6 +91,12 @@ class GenPriceAction:
             (Default: True).
         percent_loss (float):
             Percentage loss allowed for investment (Default: 0.05).
+        trigger_trail (float):
+            If provided, Percentage profit required to trigger trailing profit.
+            No trailing profit if None (Default: None).
+        step (float):
+            Percent profit increment to trail profit. If None, increment set to
+            current high - trigger_trail_level (Default: 0.05).
         top_n (int):
             Top N number of stocks with lowest pvalue.
 
@@ -128,14 +134,17 @@ class GenPriceAction:
             Time period used to compute cointegration (Default: 5).
         num_lots (int):
             Number of lots to intitate new open positions (Default: 1).
-        req_cols (list[str]):
-            List of required columns to generate trades
-            (Default: ["date", "high", "low", "close", "entry_signal", "exit_signal"]).
         monitor_close (bool):
             Whether to monitor close price ("close") or both high and low price
             (Default: True).
         percent_loss (float):
             Percentage loss allowed for investment (Default: 0.05).
+        trigger_trail (float):
+            If provided, Percentage profit required to trigger trailing profit.
+            No trailing profit if None (Default: None).
+        step (float):
+            Percent profit increment to trail profit. If None, increment set to
+            current high - trigger_trail_level (Default: 0.05).
         top_n (int):
             Top N number of stocks with lowest pvalue.
         coint_corr_path (str):
@@ -167,16 +176,10 @@ class GenPriceAction:
         coint_corr_fn: CointCorrFn = "coint",
         period: int = 5,
         num_lots: int = 1,
-        req_cols: list[str] = [
-            "date",
-            "high",
-            "low",
-            "close",
-            "entry_signal",
-            "exit_signal",
-        ],
         monitor_close: bool = True,
         percent_loss: float = 0.05,
+        trigger_trail: float | None = None,
+        step: float = 0.05,
         top_n: int = 10,
     ) -> None:
         self.path = path
@@ -193,9 +196,10 @@ class GenPriceAction:
         self.coint_corr_fn = coint_corr_fn
         self.period = period
         self.num_lots = num_lots
-        self.req_cols = req_cols
         self.monitor_close = monitor_close
         self.percent_loss = percent_loss
+        self.trigger_trail = trigger_trail
+        self.step = step
         self.top_n = top_n
 
         # Generate required file paths
@@ -357,8 +361,8 @@ class GenPriceAction:
 
             # Load Sentiment Strategy
             trading_strategy = self.gen_strategy()
-            df_trades, df_signals = trading_strategy(df_coint_corr_ticker)
-            trades_list.append(df_trades)
+            df_trade, df_signals = trading_strategy(df_coint_corr_ticker)
+            trades_list.append(df_trade)
 
             # Create folder if not exist
             utils.create_folder(self.price_action_dir)
@@ -394,10 +398,11 @@ class GenPriceAction:
             entry_struct=self.entry_struct,
             exit_struct=self.exit_struct,
             num_lots=self.num_lots,
-            req_cols=self.req_cols,
             monitor_close=self.monitor_close,
             percent_loss=self.percent_loss,
             stop_method=self.stop_method,
+            trigger_trail=self.trigger_trail,
+            step=self.step,
             entry_struct_path=self.path.entry_struct_path,
             exit_struct_path=self.path.exit_struct_path,
             stop_method_path=self.path.stop_method_path,

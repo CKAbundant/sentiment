@@ -56,7 +56,9 @@ class TradingStrategy:
         combination of entry, profit exit and stop exit.
 
         Args:
-            df_ohlcv (pd.DataFrame): DataFrame containing OHLCV data and TA (if any).
+            df_ohlcv (pd.DataFrame):
+                DataFrame containing OHLCV data and TA (if any) for
+                specific stock ticker.
 
         Returns:
             df_trades (pd.DataFrame):

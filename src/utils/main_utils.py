@@ -35,9 +35,7 @@ def gen_signals(date: str, snp500_list: str, cfg: DictConfig) -> None:
 
     else:
         # Test specific strategy
-        gen_pa = GenPriceAction(
-            date=date, snp500_list=snp500_list, **cfg.single, **cfg.std
-        )
+        gen_pa = GenPriceAction(date=date, snp500_list=snp500_list, **cfg.single)
         _ = gen_pa.run()
 
 

@@ -21,11 +21,8 @@ StratComponent = Literal[
 # Trades
 PriceAction = Literal["buy", "sell", "wait"]
 EntryType = Literal["long", "short", "longshort"]
-EntryMethod = Literal["multiple", "multiple_half", "single"]
-ExitMethod = Literal["fifo", "lifo", "half_fifo", "half_lifo", "take_all"]
-StopMethod = Literal[
-    "no_stop",
-    "percent_loss",
-    "latest_loss",
-    "nearest_loss",
+EntryMethod = Literal["MultiEntry", "MultiHalfEntry", "SingleEntry"]
+ExitMethod = Literal[
+    "FIFOExit", "LIFOExit", "HalfFIFOExit", "HalfLIFOExit", "TakeAllExit"
 ]
+StopMethod = Literal["no_stop", "PercentLoss", "LatestLoss", "NearestLoss"]

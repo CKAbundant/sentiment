@@ -330,7 +330,7 @@ def display_divergent_rating(
     ],
     models: list[str] = ["prosusai", "yiyanghkust", "ziweichen", "aventiq_ai"],
 ) -> pd.DataFrame:
-    """Display diver
+    """Display diverigent rating
 
     Args:
         data (pd.DataFrame):
